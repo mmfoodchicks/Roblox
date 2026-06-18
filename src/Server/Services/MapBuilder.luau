@@ -22,6 +22,12 @@
 
 local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local DataService = require(script.Parent.DataService)
+
+local FishingNetwork = ReplicatedStorage:WaitForChild("FishingNetwork") :: RemoteEvent
 
 local MapBuilder = {}
 
@@ -31,13 +37,18 @@ local MapBuilder = {}
 
 local MAP_FOLDER_NAME = "GeneratedMap"
 
-local ISLAND_RADIUS = 64       -- Grass island radius.
-local BEACH_WIDTH = 14         -- Sand ring width beyond the grass.
-local WATER_RADIUS = 220       -- Outer radius of the terrain water lake.
+local ISLAND_RADIUS = 90       -- Grass island radius.
+local BEACH_WIDTH = 16         -- Sand ring width beyond the grass.
+local WATER_RADIUS = 300       -- Outer radius of the terrain water lake.
 local WATER_DEPTH = 40         -- How deep the lake is carved below y = 0.
-local DOCK_LENGTH = 70         -- Dock reach out over the water (+Z).
+local DOCK_LENGTH = 80         -- Dock reach out over the water (+Z).
 local DOCK_WIDTH = 12
 local DOCK_HEIGHT = 6          -- Deck height above water level.
+
+-- Parkour course tuning.
+local PARKOUR_PLATFORMS = 11   -- Number of jumps.
+local PARKOUR_REWARD = 1500    -- Coins for reaching the top...
+local PARKOUR_COOLDOWN = 120   -- ...claimable at most once per this many seconds.
 
 -- A small, fixed palette so the scene reads cleanly.
 local COLORS = {
@@ -48,6 +59,16 @@ local COLORS = {
 	Rock = Color3.fromRGB(120, 124, 128),
 	Trunk = Color3.fromRGB(104, 72, 44),
 	Leaves = Color3.fromRGB(64, 138, 70),
+	Reward = Color3.fromRGB(240, 200, 90),
+}
+
+-- Rotating platform palette for the parkour.
+local PARKOUR_COLORS = {
+	Color3.fromRGB(88, 196, 120),
+	Color3.fromRGB(64, 156, 255),
+	Color3.fromRGB(170, 96, 255),
+	Color3.fromRGB(240, 180, 70),
+	Color3.fromRGB(255, 90, 140),
 }
 
 -- ---------------------------------------------------------------------------
@@ -293,6 +314,106 @@ local function buildScenery(parent: Instance)
 	end
 end
 
+-- Builds an ascending floating-platform parkour off the island's -X side, with a
+-- glowing coin reward at the top. The reward grants coins (server-authoritative)
+-- with a per-player cooldown so it can't be farmed.
+local function buildParkour(parent: Instance)
+	local model = Instance.new("Model")
+	model.Name = "Parkour"
+	model.Parent = parent
+
+	-- Start just off the island edge, ascending outward over the water.
+	local pos = Vector3.new(-(ISLAND_RADIUS - 10), 4, -14)
+	local lastPlatformPos = pos
+
+	for i = 1, PARKOUR_PLATFORMS do
+		local isLast = i == PARKOUR_PLATFORMS
+		local size = if isLast then Vector3.new(14, 1, 14) else Vector3.new(6, 1, 6)
+		local color = if isLast then COLORS.Reward else PARKOUR_COLORS[((i - 1) % #PARKOUR_COLORS) + 1]
+
+		makePart({
+			Name = if isLast then "Summit" else "Platform" .. i,
+			Size = size,
+			CFrame = CFrame.new(pos),
+			Color = color,
+			Material = if isLast then Enum.Material.WoodPlanks else Enum.Material.SmoothPlastic,
+			Parent = model,
+		})
+
+		lastPlatformPos = pos
+
+		-- Next platform: step outward (-X) and up, zig-zagging in Z so jumps
+		-- alternate direction. Gaps are tuned to be reachable with a default jump.
+		local dz = if i % 2 == 0 then 6 else -6
+		pos += Vector3.new(-7.5, 3.6, dz)
+	end
+
+	-- Glowing reward beacon on the summit (walk into it to claim).
+	local reward = makePart({
+		Name = "ParkourReward",
+		Size = Vector3.new(4, 4, 4),
+		CFrame = CFrame.new(lastPlatformPos + Vector3.new(0, 4, 0)),
+		Color = COLORS.Reward,
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+		Parent = model,
+	})
+	reward:SetAttribute("IsParkourReward", true)
+
+	local light = Instance.new("PointLight")
+	light.Color = COLORS.Reward
+	light.Range = 18
+	light.Brightness = 3
+	light.Parent = reward
+
+	-- Floating call-out.
+	local billboard = Instance.new("BillboardGui")
+	billboard.Size = UDim2.fromOffset(180, 44)
+	billboard.StudsOffset = Vector3.new(0, 3, 0)
+	billboard.AlwaysOnTop = true
+	billboard.Parent = reward
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.GothamBold
+	label.TextScaled = true
+	label.TextColor3 = Color3.fromRGB(255, 240, 180)
+	label.TextStrokeTransparency = 0.3
+	label.Text = string.format("🏆 +%d Coins", PARKOUR_REWARD)
+	label.Parent = billboard
+
+	-- Server-authoritative reward grant with a per-player cooldown.
+	local lastClaim: { [Player]: number } = {}
+	reward.Touched:Connect(function(hit: BasePart)
+		local character = hit.Parent
+		if character == nil then
+			return
+		end
+		local player = Players:GetPlayerFromCharacter(character)
+		if player == nil then
+			return
+		end
+
+		local now = os.clock()
+		local previous = lastClaim[player]
+		if previous ~= nil and (now - previous) < PARKOUR_COOLDOWN then
+			return
+		end
+		lastClaim[player] = now
+
+		local newBalance = DataService:AwardCoins(player, PARKOUR_REWARD)
+		if newBalance ~= nil then
+			FishingNetwork:FireClient(player, "Notice", {
+				text = string.format("🏆 Parkour complete!  +%d coins", PARKOUR_REWARD),
+			})
+		end
+	end)
+
+	Players.PlayerRemoving:Connect(function(player: Player)
+		lastClaim[player] = nil
+	end)
+end
+
 local function tuneLighting()
 	-- NOTE: Lighting.Technology is a protected property that game scripts cannot
 	-- write at runtime (it raises "lacking capability RobloxScript"). It is set
@@ -358,6 +479,7 @@ function MapBuilder:Build(): Folder
 	buildDock(mapFolder)
 	buildSpawn(mapFolder)
 	buildScenery(mapFolder)
+	buildParkour(mapFolder)
 
 	mapFolder.Parent = Workspace
 

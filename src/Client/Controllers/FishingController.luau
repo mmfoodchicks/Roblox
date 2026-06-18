@@ -34,10 +34,14 @@ local LocalPlayer = Players.LocalPlayer
 -- Minigame tuning
 -- ---------------------------------------------------------------------------
 
-local TARGET_WIDTH_SCALE = 0.22 -- Target zone width as a fraction of the track.
-local MARKER_WIDTH_SCALE = 0.04 -- Marker width as a fraction of the track.
-local SWEEP_SPEED = 1.35         -- Full track sweeps per second.
-local MINIGAME_TIMEOUT = 6       -- Auto-fail (miss) if the player never reacts.
+-- Difficulty is randomised per cast: a narrower green zone and/or a faster sweep
+-- make a given round harder. Tune the ranges to taste.
+local TARGET_MIN_SCALE = 0.09  -- narrowest (hardest) green zone
+local TARGET_MAX_SCALE = 0.20  -- widest (easiest) green zone
+local MARKER_WIDTH_SCALE = 0.035 -- Marker width as a fraction of the track.
+local SWEEP_MIN_SPEED = 1.9     -- slowest sweep (full tracks / second)
+local SWEEP_MAX_SPEED = 2.9     -- fastest sweep
+local MINIGAME_TIMEOUT = 6      -- Auto-fail (miss) if the player never reacts.
 
 -- ---------------------------------------------------------------------------
 -- Controller state
@@ -48,6 +52,16 @@ local FishingController = {}
 -- Identifies the cast the current minigame belongs to, so a late server packet
 -- for a previous cast cannot reopen the UI.
 local activeCastId: number? = nil
+
+-- True between firing RequestCast and the bite (or a rejection) arriving, so we
+-- never spam the server with extra casts during the wait (which produced the
+-- spurious "Casting too quickly" message).
+local castPending = false
+
+-- The current round's randomised difficulty, set in startMinigame and read by
+-- the sweep + hit test so the green zone size and speed vary each cast.
+local currentTargetWidth = TARGET_MAX_SCALE
+local currentSweepSpeed = SWEEP_MIN_SPEED
 
 -- The live RenderStepped connection for the sweeping marker, if any.
 local sweepConnection: RBXScriptConnection? = nil
@@ -110,7 +124,7 @@ local function buildUi()
 	target.Name = "Target"
 	target.AnchorPoint = Vector2.new(0.5, 0.5)
 	target.Position = UDim2.fromScale(0.5, 0.5)
-	target.Size = UDim2.fromScale(TARGET_WIDTH_SCALE, 0.8)
+	target.Size = UDim2.fromScale(currentTargetWidth, 0.8)
 	target.BackgroundColor3 = Color3.fromRGB(88, 196, 120)
 	target.BackgroundTransparency = 0.25
 	target.BorderSizePixel = 0
@@ -292,11 +306,19 @@ local function startMinigame(castId: number)
 	local mark = marker :: Frame
 
 	activeCastId = castId
+	castPending = false -- the bite arrived; stop blocking input
+
+	-- Randomise difficulty for this round: a green zone somewhere between the
+	-- min/max width, and a sweep speed somewhere between the min/max.
+	currentTargetWidth = TARGET_MIN_SCALE + math.random() * (TARGET_MAX_SCALE - TARGET_MIN_SCALE)
+	currentSweepSpeed = SWEEP_MIN_SPEED + math.random() * (SWEEP_MAX_SPEED - SWEEP_MIN_SPEED)
 
 	-- Randomise the target zone position each round (kept fully on-track).
-	local half = TARGET_WIDTH_SCALE / 2
-	local targetCenter = half + math.random() * (1 - TARGET_WIDTH_SCALE)
-	;(targetZone :: Frame).Position = UDim2.fromScale(targetCenter, 0.5)
+	local half = currentTargetWidth / 2
+	local targetCenter = half + math.random() * (1 - currentTargetWidth)
+	local target = targetZone :: Frame
+	target.Size = UDim2.fromScale(currentTargetWidth, 0.8)
+	target.Position = UDim2.fromScale(targetCenter, 0.5)
 
 	frame.Visible = true
 
@@ -312,7 +334,7 @@ local function startMinigame(castId: number)
 		local elapsed = os.clock() - startClock
 
 		-- Triangle wave in [0, 1].
-		local phase = (elapsed * SWEEP_SPEED) % 2
+		local phase = (elapsed * currentSweepSpeed) % 2
 		local position = if phase <= 1 then phase else 2 - phase
 		mark.Position = UDim2.fromScale(position, 0.5)
 
@@ -333,7 +355,7 @@ local function attemptHook()
 
 	local markPos = (marker :: Frame).Position.X.Scale
 	local targetCenter = (targetZone :: Frame).Position.X.Scale
-	local halfTarget = TARGET_WIDTH_SCALE / 2
+	local halfTarget = currentTargetWidth / 2
 
 	local success = math.abs(markPos - targetCenter) <= halfTarget
 	resolve(castId, success)
@@ -362,12 +384,21 @@ local function bindRodTool(tool: Tool)
 	boundTools[tool] = true
 
 	tool.Activated:Connect(function()
-		-- Ignore activation while a minigame is already open.
-		if activeCastId ~= nil then
+		-- Ignore activation while a minigame is open OR a cast is already waiting
+		-- for its bite — otherwise repeated clicks spam RequestCast and the server
+		-- rightly rejects them ("Casting too quickly").
+		if activeCastId ~= nil or castPending then
 			return
 		end
+		castPending = true
 		playWaterSplash()
 		FishingNetwork:FireServer("RequestCast")
+
+		-- Safety net: if the bite/rejection packet is ever missed, never leave the
+		-- player permanently unable to cast. (Bite times are only a few seconds.)
+		task.delay(12, function()
+			castPending = false
+		end)
 	end)
 end
 
@@ -448,8 +479,10 @@ function FishingController:Init()
 				startMinigame(castId)
 			end
 		elseif action == "CatchResult" then
+			castPending = false
 			onCatchResult(payload or {})
 		elseif action == "CastRejected" then
+			castPending = false
 			local reason = payload and payload.reason
 			showToast(tostring(reason or "Cast failed"), Color3.fromRGB(220, 180, 90))
 		elseif action == "Notice" then
