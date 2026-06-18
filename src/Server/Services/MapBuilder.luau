@@ -24,8 +24,10 @@ local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TeleportService = game:GetService("TeleportService")
 
 local DataService = require(script.Parent.DataService)
+local TeleportConfig = require(ReplicatedStorage.Shared.TeleportConfig)
 
 local FishingNetwork = ReplicatedStorage:WaitForChild("FishingNetwork") :: RemoteEvent
 
@@ -37,26 +39,32 @@ local MapBuilder = {}
 
 local MAP_FOLDER_NAME = "GeneratedMap"
 
-local ISLAND_RADIUS = 90       -- Grass island radius.
-local BEACH_WIDTH = 16         -- Sand ring width beyond the grass.
-local WATER_RADIUS = 300       -- Outer radius of the terrain water lake.
-local WATER_DEPTH = 40         -- How deep the lake is carved below y = 0.
-local DOCK_LENGTH = 80         -- Dock reach out over the water (+Z).
-local DOCK_WIDTH = 12
+local ISLAND_RADIUS = 180      -- Grass island radius (a huge island to explore).
+local BEACH_WIDTH = 20         -- Sand ring width beyond the grass.
+local WATER_RADIUS = 520       -- Outer radius of the terrain water lake.
+local WATER_DEPTH = 50         -- How deep the lake is carved below y = 0.
+local DOCK_LENGTH = 90         -- Dock reach out over the water (+Z).
+local DOCK_WIDTH = 14
 local DOCK_HEIGHT = 6          -- Deck height above water level.
 
--- Parkour course tuning — a rocky climb up the mountainside.
-local PARKOUR_PLATFORMS = 16   -- Number of ledges (more + tighter = harder).
-local PARKOUR_REWARD = 150     -- Coins for reaching the summit (~10 common fish)...
+-- Spawn near the dock so fishing is immediate; the mountain/parkour sits across
+-- the island as an area to discover.
+local SPAWN_Z = ISLAND_RADIUS - 34
+
+-- Parkour course tuning — a long spiral climb wrapping the mountain to the top.
+local PARKOUR_REWARD = 250     -- Coins for reaching the summit...
 local PARKOUR_COOLDOWN = 90    -- ...claimable at most once per this many seconds.
+local PARKOUR_STEP_UP = 2.8    -- Height gained per ledge.
+local PARKOUR_CHORD = 9        -- Horizontal jump distance between ledges.
+local PARKOUR_LEDGE_OUT = 3    -- How far ledges jut from the rock slope.
 
 -- The mountain the parkour climbs (sculpted from Terrain rock so it meshes with
 -- the world). Positioned on the island's -X side, clear of the dock (+Z).
-local MOUNTAIN_X = -40
-local MOUNTAIN_Z = -15
-local MOUNTAIN_HEIGHT = 72
-local MOUNTAIN_BASE_R = 32
-local MOUNTAIN_TOP_R = 5
+local MOUNTAIN_X = -70
+local MOUNTAIN_Z = 0
+local MOUNTAIN_HEIGHT = 130
+local MOUNTAIN_BASE_R = 55
+local MOUNTAIN_TOP_R = 9
 
 -- A small, fixed palette so the scene reads cleanly.
 local COLORS = {
@@ -252,7 +260,7 @@ local function buildSpawn(parent: Instance)
 	local spawn = Instance.new("SpawnLocation")
 	spawn.Name = "FishingSpawn"
 	spawn.Size = Vector3.new(12, 1, 12)
-	spawn.CFrame = CFrame.new(0, 0.5, -ISLAND_RADIUS * 0.4)
+	spawn.CFrame = CFrame.new(0, 0.5, SPAWN_Z)
 	spawn.Anchored = true
 	spawn.Color = COLORS.Wood
 	spawn.Material = Enum.Material.WoodPlanks
@@ -306,16 +314,21 @@ local function buildScenery(parent: Instance)
 	local rng = Random.new(20240618)
 
 	-- Ring of trees set back from the beach, leaving the dock side (+Z) open.
-	local treeCount = 9
+	local treeCount = 18
 	for i = 1, treeCount do
 		local angle = (i / treeCount) * math.pi * 2
 		-- Skip the wedge facing the dock so it stays clear.
-		if math.abs(angle - math.pi / 2) < 0.6 then
+		if math.abs(angle - math.pi / 2) < 0.5 then
 			continue
 		end
-		local radius = ISLAND_RADIUS * 0.7 + rng:NextNumber(-6, 6)
+		local radius = ISLAND_RADIUS * 0.72 + rng:NextNumber(-12, 12)
 		local x = math.cos(angle) * radius
 		local z = math.sin(angle) * radius
+		-- Skip any tree that would land inside the mountain footprint.
+		local dx, dz = x - MOUNTAIN_X, z - MOUNTAIN_Z
+		if (dx * dx + dz * dz) < (MOUNTAIN_BASE_R + 12) ^ 2 then
+			continue
+		end
 		buildTree(scenery, Vector3.new(x, 0, z))
 	end
 
@@ -341,40 +354,68 @@ local function buildScenery(parent: Instance)
 	end
 end
 
--- Builds the parkour as rocky ledges climbing the mountain's east face up to a
--- glowing coin reward near the summit. The reward grants coins (server-
--- authoritative) with a per-player cooldown so it can't be farmed.
+-- Builds the parkour as a long spiral of rocky ledges wrapping the mountain all
+-- the way to a glowing coin reward on the summit. The reward grants coins
+-- (server-authoritative) with a per-player cooldown so it can't be farmed.
+--
+-- The spiral keeps each jump reachable: at a given height the cone has radius r,
+-- so to step ~PARKOUR_CHORD studs around the circle we advance the angle by
+-- 2*asin(chord / 2r). As the cone narrows toward the top, that angle grows, so
+-- the path naturally winds tighter near the summit.
 local function buildParkour(parent: Instance)
 	local model = Instance.new("Model")
 	model.Name = "Parkour"
 	model.Parent = parent
 
-	-- Ledges hug the mountain's +X (east) face, stepping inward + up along the
-	-- slope with a zig-zag in Z. Pads shrink as you climb, for tight landings.
-	for i = 1, PARKOUR_PLATFORMS do
-		local frac = (i - 1) / math.max(1, PARKOUR_PLATFORMS - 1)
-		local h = 3 + frac * (MOUNTAIN_HEIGHT - 9)
-		local r = coneRadius(h) + 2 -- jut out from the rock slope
-		local zz = (if i % 2 == 0 then 1 else -1) * 4.5
+	local startH = 4
+	local topH = MOUNTAIN_HEIGHT - 8
+	local h = startH
+	local angle = 0
+	local index = 0
+	local lastPos = Vector3.new(MOUNTAIN_X + coneRadius(startH) + PARKOUR_LEDGE_OUT, startH, MOUNTAIN_Z)
+
+	-- A small signpost at the base so players discover the climb.
+	makePart({
+		Name = "ClimbSign",
+		Size = Vector3.new(1, 7, 1),
+		CFrame = CFrame.new(lastPos + Vector3.new(3, 3, 0)),
+		Color = COLORS.WoodDark,
+		Material = Enum.Material.Wood,
+		Parent = model,
+	})
+
+	while h <= topH and index < 200 do
+		index += 1
+		local r = coneRadius(h) + PARKOUR_LEDGE_OUT
+		local pos = Vector3.new(MOUNTAIN_X + math.cos(angle) * r, h, MOUNTAIN_Z + math.sin(angle) * r)
+
+		-- Pads shrink with height for tighter landings near the top.
+		local frac = (h - startH) / (topH - startH)
 		local dim = math.max(3, 5 - math.floor(frac * 2 + 0.5))
 
 		makePart({
-			Name = "Ledge" .. i,
+			Name = "Ledge" .. index,
 			Size = Vector3.new(dim, 1, dim + 1),
-			CFrame = CFrame.new(MOUNTAIN_X + r, h, MOUNTAIN_Z + zz),
+			CFrame = CFrame.new(pos),
 			Color = COLORS.LedgeRock,
 			Material = Enum.Material.Slate,
 			Parent = model,
 		})
+		lastPos = pos
+
+		-- Advance: around the circle by a reachable chord, and up one step.
+		local ratio = math.clamp(PARKOUR_CHORD / (2 * r), 0, 1)
+		angle += 2 * math.asin(ratio)
+		h += PARKOUR_STEP_UP
 	end
 
-	-- Flat summit ledge near the top of the east face (reachable from the last
-	-- climbing ledge), where the reward sits.
-	local summitHeight = MOUNTAIN_HEIGHT - 2
-	local summitPos = Vector3.new(MOUNTAIN_X + coneRadius(summitHeight) + 2, summitHeight, MOUNTAIN_Z)
+	-- Summit: continue the spiral one more (reachable) step into a big landing
+	-- pad that caps the climb, with the reward beacon above it.
+	local sr = coneRadius(topH) + PARKOUR_LEDGE_OUT
+	local summitPos = Vector3.new(MOUNTAIN_X + math.cos(angle) * sr, topH + 3, MOUNTAIN_Z + math.sin(angle) * sr)
 	makePart({
 		Name = "Summit",
-		Size = Vector3.new(9, 1, 9),
+		Size = Vector3.new(10, 1, 10),
 		CFrame = CFrame.new(summitPos),
 		Color = COLORS.Reward,
 		Material = Enum.Material.WoodPlanks,
@@ -447,6 +488,119 @@ local function buildParkour(parent: Instance)
 	end)
 end
 
+-- Builds a row of teleport portals near spawn. Each portal sends the player to
+-- one of the games configured in TeleportConfig (fill in the PlaceIds). Portals
+-- with PlaceId == 0 are shown as "Coming soon" and do nothing.
+local function buildHub(parent: Instance)
+	local model = Instance.new("Model")
+	model.Name = "Hub"
+	model.Parent = parent
+
+	local destinations = TeleportConfig.Destinations
+	local count = #destinations
+	if count == 0 then
+		return
+	end
+
+	local spacing = 18
+	local startX = -((count - 1) * spacing) / 2
+	local hubZ = SPAWN_Z - 22 -- just behind the spawn pad
+
+	local teleporting: { [Player]: boolean } = {}
+
+	for i, dest in ipairs(destinations) do
+		local x = startX + (i - 1) * spacing
+		local base = Vector3.new(x, 0, hubZ)
+
+		-- Two pillars + a top bar form the frame.
+		for _, side in ipairs({ -1, 1 }) do
+			makePart({
+				Name = "Pillar",
+				Size = Vector3.new(1.2, 12, 1.2),
+				CFrame = CFrame.new(base + Vector3.new(side * 4, 6, 0)),
+				Color = COLORS.WoodDark,
+				Material = Enum.Material.Wood,
+				Parent = model,
+			})
+		end
+		makePart({
+			Name = "Lintel",
+			Size = Vector3.new(10, 1.2, 1.2),
+			CFrame = CFrame.new(base + Vector3.new(0, 12.5, 0)),
+			Color = COLORS.WoodDark,
+			Material = Enum.Material.Wood,
+			Parent = model,
+		})
+
+		-- The glowing portal surface is the touch trigger.
+		local surface = makePart({
+			Name = "Portal_" .. dest.Name,
+			Size = Vector3.new(7.6, 11, 0.6),
+			CFrame = CFrame.new(base + Vector3.new(0, 6, 0)),
+			Color = dest.Color,
+			Material = Enum.Material.Neon,
+			Transparency = 0.4,
+			CanCollide = false,
+			Parent = model,
+		})
+
+		local light = Instance.new("PointLight")
+		light.Color = dest.Color
+		light.Range = 16
+		light.Brightness = 2
+		light.Parent = surface
+
+		-- Label above the portal.
+		local billboard = Instance.new("BillboardGui")
+		billboard.Size = UDim2.fromOffset(220, 50)
+		billboard.StudsOffset = Vector3.new(0, 8, 0)
+		billboard.AlwaysOnTop = true
+		billboard.Parent = surface
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.fromScale(1, 1)
+		label.BackgroundTransparency = 1
+		label.Font = Enum.Font.GothamBold
+		label.TextScaled = true
+		label.TextColor3 = Color3.fromRGB(255, 255, 255)
+		label.TextStrokeTransparency = 0.3
+		label.Text = if dest.PlaceId == 0 then dest.Name .. "\n(Coming soon)" else "▶ " .. dest.Name
+		label.Parent = billboard
+
+		surface.Touched:Connect(function(hit: BasePart)
+			local character = hit.Parent
+			if character == nil then
+				return
+			end
+			local player = Players:GetPlayerFromCharacter(character)
+			if player == nil or teleporting[player] then
+				return
+			end
+
+			if dest.PlaceId == 0 then
+				FishingNetwork:FireClient(player, "Notice", {
+					text = dest.Name .. " isn't set up yet.",
+				})
+				return
+			end
+
+			teleporting[player] = true
+			FishingNetwork:FireClient(player, "Notice", { text = "Teleporting to " .. dest.Name .. "..." })
+			local ok, err = pcall(function()
+				TeleportService:Teleport(dest.PlaceId, player)
+			end)
+			if not ok then
+				teleporting[player] = false
+				warn("[MapBuilder] Teleport failed:", err)
+				FishingNetwork:FireClient(player, "Notice", { text = "Teleport failed (try in the live game)." })
+			end
+		end)
+	end
+
+	Players.PlayerRemoving:Connect(function(player: Player)
+		teleporting[player] = nil
+	end)
+end
+
 local function tuneLighting()
 	-- NOTE: Lighting.Technology is a protected property that game scripts cannot
 	-- write at runtime (it raises "lacking capability RobloxScript"). It is set
@@ -513,6 +667,7 @@ function MapBuilder:Build(): Folder
 	buildSpawn(mapFolder)
 	buildScenery(mapFolder)
 	buildParkour(mapFolder)
+	buildHub(mapFolder)
 
 	mapFolder.Parent = Workspace
 

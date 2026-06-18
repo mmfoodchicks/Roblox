@@ -44,6 +44,9 @@
         },
         "DailyConfig": {
           "$path": "src/Shared/DailyConfig.luau"
+        },
+        "TeleportConfig": {
+          "$path": "src/Shared/TeleportConfig.luau"
         }
       },
 
@@ -135,6 +138,9 @@
           },
           "DailyController": {
             "$path": "src/Client/Controllers/DailyController.luau"
+          },
+          "SprintController": {
+            "$path": "src/Client/Controllers/SprintController.luau"
           },
           "FishingController": {
             "$path": "src/Client/Controllers/FishingController.luau"

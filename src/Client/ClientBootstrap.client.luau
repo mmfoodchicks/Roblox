@@ -26,6 +26,7 @@ local InventoryController = require(Controllers:WaitForChild("InventoryControlle
 local StoreController = require(Controllers:WaitForChild("StoreController"))
 local CrateController = require(Controllers:WaitForChild("CrateController"))
 local DailyController = require(Controllers:WaitForChild("DailyController"))
+local SprintController = require(Controllers:WaitForChild("SprintController"))
 local HudController = require(Controllers:WaitForChild("HudController"))
 local FishingController = require(Controllers:WaitForChild("FishingController"))
 
@@ -35,6 +36,7 @@ InventoryController:Init()
 StoreController:Init()
 CrateController:Init()
 DailyController:Init()
+SprintController:Init()
 HudController:Init()
 FishingController:Init()
 
