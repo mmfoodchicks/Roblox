@@ -109,6 +109,28 @@ StarterPlayer/StarterPlayerScripts
 - `ShopFunction` handler for `BuyRod`, `EquipRod`, `BuyLuck`, `SellAll`. Every
   price check and coin movement happens here against `GameConfig`; wrapped in
   `pcall` so a malformed request can never hang the RemoteFunction.
+- `SellAll` applies the player's monetization **coin multiplier** before paying.
+
+### `MonetizationService` (Server, authoritative) 💰
+- The Robux earnings layer. Defines perks in `MonetizationConfig` (shared):
+  - **Game Passes** (one-time): **VIP** (2× sell coins + luck), **Lucky Charm**
+    (2× luck), **Auto Fisher** (passive server-side catching).
+  - **Developer Products** (repeatable): **1k / 10k / 100k coin packs**, and a
+    **Luck Potion** (3× luck for 10 minutes).
+  - **Roblox Premium**: passive 1.25× coin bonus (and you earn Premium Payouts).
+- Verifies pass ownership on join (`UserOwnsGamePassAsync`), tracks Premium, and
+  exposes `GetCoinMultiplier` / `GetLuckMultiplier` that `FishingService` and
+  `ShopService` consult so perks actually change gameplay.
+- **Idempotent `ProcessReceipt`**: records each receipt's `PurchaseId` in the
+  profile before acknowledging, so a retried grant can never double-pay.
+- `StoreController` (client) renders the in-game **💎 Store** and prompts
+  purchases via `MarketplaceService`.
+
+> **⚠️ Set your asset IDs.** Passes/products are created on the Roblox Creator
+> Dashboard and each gets a numeric id. Paste them into the `Id = 0` fields in
+> `src/Shared/MonetizationConfig.luau`. Until an id is non-zero the store marks
+> that item **Unavailable** and the server skips it — the game still runs.
+> See **Monetization setup** below.
 
 ### `MapBuilder` (Server)
 - Procedurally builds the scene at boot — **no binary assets**, seeded for
@@ -142,6 +164,25 @@ StarterPlayer/StarterPlayerScripts
    to hook in the minigame, then sell your catch and buy upgrades.
 4. Enable **Studio Access to API Services** so ProfileService can use DataStores
    (it auto-falls back to a mock store in Studio when disabled).
+
+## Monetization setup (turn it into real Robux)
+
+You must publish the place first, then create the products on the **Roblox
+Creator Dashboard** (`create.roblox.com` → your game → **Monetization**):
+
+1. **Game Passes** → *Create a Pass* for each of: VIP, Lucky Charm, Auto Fisher.
+   Copy each pass's numeric **Id**.
+2. **Developer Products** → *Create a Product* for each coin pack (1k / 10k /
+   100k) and the Luck Potion. Copy each product's **Id**.
+3. Paste those ids into the matching `Id = 0` fields in
+   `src/Shared/MonetizationConfig.luau`, then re-sync/rebuild.
+4. Set a price (in Robux) on each item in the dashboard — that's what players pay
+   and what the store auto-displays via `GetProductInfo`.
+5. Encourage **Roblox Premium** players: they already grant you Premium Payouts,
+   and in-game they get the 1.25× coin bonus automatically.
+
+Revenue then flows in through three channels: pass sales, product sales, and
+Premium Payouts. Robux earned is cashable via the Developer Exchange (DevEx).
 
 ## Credits
 - [ProfileService](https://github.com/MadStudioRoblox/ProfileService) by loleris

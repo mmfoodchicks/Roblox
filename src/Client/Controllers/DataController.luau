@@ -33,6 +33,9 @@ export type PlayerData = {
 	Inventory: { InventoryEntry },
 	OwnedRods: { [string]: boolean },
 	Stats: { TotalCaught: number, CoinsEarned: number },
+	Passes: { [string]: boolean },
+	IsPremium: boolean,
+	PurchaseHistory: { [string]: boolean },
 }
 
 local DataController = {}

@@ -55,6 +55,12 @@ export type PlayerData = {
 	Inventory: { InventoryEntry },
 	OwnedRods: { [string]: boolean },
 	Stats: PlayerStats,
+	-- Monetization: a cache of owned game passes (re-verified on join), the
+	-- Premium flag, and a set of handled Developer Product receipt ids for
+	-- idempotent granting across server restarts.
+	Passes: { [string]: boolean },
+	IsPremium: boolean,
+	PurchaseHistory: { [string]: boolean },
 }
 
 -- The slice of the ProfileService Profile object we actually use.
@@ -81,6 +87,9 @@ local PROFILE_TEMPLATE: PlayerData = {
 		TotalCaught = 0,
 		CoinsEarned = 0,
 	},
+	Passes = {},
+	IsPremium = false,
+	PurchaseHistory = {},
 }
 
 local STORE_KEY = if RunService:IsStudio() then "PlayerData_Studio" else "PlayerData_Live"
@@ -289,6 +298,56 @@ function DataService:SetLuckLevel(player: Player, level: number): boolean
 	end
 	profile.Data.LuckLevel = math.max(1, math.floor(level))
 	sync(player, profile.Data)
+	return true
+end
+
+--[[
+	SetPass
+	Caches ownership of a game pass (re-verified against Roblox on join). Returns
+	success. Replicates so the store/HUD reflect the perk immediately.
+]]
+function DataService:SetPass(player: Player, passKey: string, owned: boolean): boolean
+	local profile = activeProfile(player)
+	if profile == nil then
+		return false
+	end
+	profile.Data.Passes[passKey] = owned or nil
+	sync(player, profile.Data)
+	return true
+end
+
+--[[
+	SetPremium
+	Records the player's Roblox Premium status. Returns success.
+]]
+function DataService:SetPremium(player: Player, isPremium: boolean): boolean
+	local profile = activeProfile(player)
+	if profile == nil then
+		return false
+	end
+	profile.Data.IsPremium = isPremium
+	sync(player, profile.Data)
+	return true
+end
+
+--[[
+	HasHandledPurchase / RecordPurchase
+	Idempotency for Developer Product receipts. A receipt's PurchaseId is recorded
+	once granted so a retried ProcessReceipt never double-grants. We do NOT sync
+	these (the client has no use for receipt ids) — they ride along on the next
+	natural sync and are persisted by ProfileService.
+]]
+function DataService:HasHandledPurchase(player: Player, purchaseId: string): boolean
+	local profile = activeProfile(player)
+	return profile ~= nil and profile.Data.PurchaseHistory[purchaseId] == true
+end
+
+function DataService:RecordPurchase(player: Player, purchaseId: string): boolean
+	local profile = activeProfile(player)
+	if profile == nil then
+		return false
+	end
+	profile.Data.PurchaseHistory[purchaseId] = true
 	return true
 end
 

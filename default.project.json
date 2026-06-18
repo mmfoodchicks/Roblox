@@ -23,6 +23,9 @@
         },
         "GameConfig": {
           "$path": "src/Shared/GameConfig.luau"
+        },
+        "MonetizationConfig": {
+          "$path": "src/Shared/MonetizationConfig.luau"
         }
       },
 
@@ -51,6 +54,9 @@
         },
         "ShopService": {
           "$path": "src/Server/Services/ShopService.luau"
+        },
+        "MonetizationService": {
+          "$path": "src/Server/Services/MonetizationService.luau"
         },
         "LeaderstatsService": {
           "$path": "src/Server/Services/LeaderstatsService.luau"
@@ -90,6 +96,9 @@
           },
           "InventoryController": {
             "$path": "src/Client/Controllers/InventoryController.luau"
+          },
+          "StoreController": {
+            "$path": "src/Client/Controllers/StoreController.luau"
           },
           "FishingController": {
             "$path": "src/Client/Controllers/FishingController.luau"

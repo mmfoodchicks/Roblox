@@ -14,10 +14,12 @@ local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local MonetizationConfig = require(ReplicatedStorage.Shared.MonetizationConfig)
 local UiUtil = require(script.Parent.UiUtil)
 local DataController = require(script.Parent.DataController)
 local ShopController = require(script.Parent.ShopController)
 local InventoryController = require(script.Parent.InventoryController)
+local StoreController = require(script.Parent.StoreController)
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -84,8 +86,8 @@ local function build()
 	-- Bottom-right action buttons.
 	local actions = UiUtil.frame({
 		Name = "Actions",
-		Size = UDim2.fromOffset(150, 96),
-		Position = UDim2.new(1, -162, 1, -108),
+		Size = UDim2.fromOffset(150, 148),
+		Position = UDim2.new(1, -162, 1, -160),
 		Transparency = 1,
 		Parent = screen,
 	})
@@ -93,6 +95,20 @@ local function build()
 	actionsLayout.Padding = UDim.new(0, 8)
 	actionsLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	actionsLayout.Parent = actions
+
+	local storeBtn = UiUtil.button({
+		Name = "Store",
+		Size = UDim2.fromOffset(150, 44),
+		Text = "💎 Store",
+		Color = UiUtil.Palette.Warn,
+		TextColor = Color3.fromRGB(40, 32, 10),
+		TextSize = 18,
+		Parent = actions,
+	})
+	storeBtn.LayoutOrder = 1
+	storeBtn.Activated:Connect(function()
+		StoreController:Toggle()
+	end)
 
 	local shopBtn = UiUtil.button({
 		Name = "Shop",
@@ -102,7 +118,7 @@ local function build()
 		TextSize = 18,
 		Parent = actions,
 	})
-	shopBtn.LayoutOrder = 1
+	shopBtn.LayoutOrder = 2
 	shopBtn.Activated:Connect(function()
 		ShopController:Toggle()
 	end)
@@ -115,7 +131,7 @@ local function build()
 		TextSize = 18,
 		Parent = actions,
 	})
-	invBtn.LayoutOrder = 2
+	invBtn.LayoutOrder = 3
 	invBtn.Activated:Connect(function()
 		InventoryController:Toggle()
 	end)
@@ -128,9 +144,26 @@ end
 -- Refresh
 -- ---------------------------------------------------------------------------
 
+-- Mirrors MonetizationService:GetCoinMultiplier for display only (passes +
+-- Premium). The server remains authoritative for the actual payout.
+local function coinMultiplier(data: DataController.PlayerData): number
+	local multiplier = 1
+	for _, pass in pairs(MonetizationConfig.GamePasses) do
+		if pass.CoinMultiplier ~= nil and data.Passes[pass.Key] then
+			multiplier *= pass.CoinMultiplier
+		end
+	end
+	if data.IsPremium then
+		multiplier *= MonetizationConfig.PremiumCoinMultiplier
+	end
+	return multiplier
+end
+
 local function refresh(data: DataController.PlayerData)
 	if coinsLabel ~= nil then
-		coinsLabel.Text = "🪙 " .. UiUtil.comma(data.Coins)
+		local mult = coinMultiplier(data)
+		local suffix = if mult > 1 then string.format("  (x%.2g)", mult) else ""
+		coinsLabel.Text = "🪙 " .. UiUtil.comma(data.Coins) .. suffix
 	end
 
 	if valueLabel ~= nil then

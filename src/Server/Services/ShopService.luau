@@ -19,12 +19,12 @@
 	  "SellAll"           Convert the whole inventory to coins.
 ]]
 
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local DataService = require(ServerScriptService.Services.DataService)
+local MonetizationService = require(ServerScriptService.Services.MonetizationService)
 
 local ShopFunction = ReplicatedStorage:WaitForChild("ShopFunction") :: RemoteFunction
 
@@ -108,13 +108,16 @@ local function sellAll(player: Player): Response
 		return fail("Nothing to sell.")
 	end
 
-	-- Clear first (returns the summed value), then credit it.
-	local total = DataService:ClearInventory(player)
-	if total == nil then
+	-- Clear first (returns the summed base value), then apply any coin multiplier
+	-- from monetization perks (VIP / Premium) before crediting.
+	local base = DataService:ClearInventory(player)
+	if base == nil then
 		return fail("Data unavailable.")
 	end
-	DataService:AwardCoins(player, total)
-	return { success = true, earned = total }
+	local multiplier = MonetizationService:GetCoinMultiplier(player)
+	local earned = math.floor(base * multiplier + 0.5)
+	DataService:AwardCoins(player, earned)
+	return { success = true, earned = earned, base = base, multiplier = multiplier }
 end
 
 -- ---------------------------------------------------------------------------

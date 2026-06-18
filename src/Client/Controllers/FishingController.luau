@@ -418,8 +418,14 @@ local function onCatchResult(data: { [string]: any })
 		or rarityColors[item.Rarity]
 		or Color3.fromRGB(255, 255, 255)
 
-	showToast(string.format("Caught %s!  (worth %d 🪙)", tostring(item.Name), tonumber(data.value) or 0), color)
-	playCatchBurst(color)
+	local prefix = if data.auto == true then "🤖 Auto-caught " else "Caught "
+	showToast(string.format("%s%s!  (worth %d 🪙)", prefix, tostring(item.Name), tonumber(data.value) or 0), color)
+
+	-- Auto-fisher catches are frequent; skip the big particle burst to avoid
+	-- visual spam, but still flash the toast.
+	if data.auto ~= true then
+		playCatchBurst(color)
+	end
 end
 
 -- ---------------------------------------------------------------------------
@@ -446,6 +452,10 @@ function FishingController:Init()
 		elseif action == "CastRejected" then
 			local reason = payload and payload.reason
 			showToast(tostring(reason or "Cast failed"), Color3.fromRGB(220, 180, 90))
+		elseif action == "Notice" then
+			-- Generic server notice (e.g. a Luck Potion activating).
+			local text = payload and payload.text
+			showToast(tostring(text or ""), Color3.fromRGB(190, 96, 255))
 		end
 	end)
 

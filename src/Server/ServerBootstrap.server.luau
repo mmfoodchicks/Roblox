@@ -22,7 +22,10 @@ local RodToolBuilder = require(Services:WaitForChild("RodToolBuilder"))
 local DataService = require(Services:WaitForChild("DataService"))
 local LeaderstatsService = require(Services:WaitForChild("LeaderstatsService"))
 
--- Gameplay + economy, which depend on the data layer.
+-- Monetization, which FishingService and ShopService consult for multipliers.
+local MonetizationService = require(Services:WaitForChild("MonetizationService"))
+
+-- Gameplay + economy, which depend on the data + monetization layers.
 local FishingService = require(Services:WaitForChild("FishingService"))
 local ShopService = require(Services:WaitForChild("ShopService"))
 
@@ -31,6 +34,7 @@ RodToolBuilder:Init()
 
 DataService:Init()
 LeaderstatsService:Init()
+MonetizationService:Init()
 
 FishingService:Init()
 ShopService:Init()
