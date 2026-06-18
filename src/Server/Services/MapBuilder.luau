@@ -45,10 +45,18 @@ local DOCK_LENGTH = 80         -- Dock reach out over the water (+Z).
 local DOCK_WIDTH = 12
 local DOCK_HEIGHT = 6          -- Deck height above water level.
 
--- Parkour course tuning.
-local PARKOUR_PLATFORMS = 16   -- Number of jumps (more + tighter = harder).
-local PARKOUR_REWARD = 150     -- Coins for reaching the top (~10 common fish)...
+-- Parkour course tuning — a rocky climb up the mountainside.
+local PARKOUR_PLATFORMS = 16   -- Number of ledges (more + tighter = harder).
+local PARKOUR_REWARD = 150     -- Coins for reaching the summit (~10 common fish)...
 local PARKOUR_COOLDOWN = 90    -- ...claimable at most once per this many seconds.
+
+-- The mountain the parkour climbs (sculpted from Terrain rock so it meshes with
+-- the world). Positioned on the island's -X side, clear of the dock (+Z).
+local MOUNTAIN_X = -40
+local MOUNTAIN_Z = -15
+local MOUNTAIN_HEIGHT = 72
+local MOUNTAIN_BASE_R = 32
+local MOUNTAIN_TOP_R = 5
 
 -- A small, fixed palette so the scene reads cleanly.
 local COLORS = {
@@ -57,19 +65,18 @@ local COLORS = {
 	Wood = Color3.fromRGB(122, 84, 52),
 	WoodDark = Color3.fromRGB(92, 62, 38),
 	Rock = Color3.fromRGB(120, 124, 128),
+	LedgeRock = Color3.fromRGB(96, 100, 104),
 	Trunk = Color3.fromRGB(104, 72, 44),
 	Leaves = Color3.fromRGB(64, 138, 70),
 	Reward = Color3.fromRGB(240, 200, 90),
 }
 
--- Rotating platform palette for the parkour.
-local PARKOUR_COLORS = {
-	Color3.fromRGB(88, 196, 120),
-	Color3.fromRGB(64, 156, 255),
-	Color3.fromRGB(170, 96, 255),
-	Color3.fromRGB(240, 180, 70),
-	Color3.fromRGB(255, 90, 140),
-}
+-- Radius of the mountain cone at a given height (used by both the terrain
+-- sculptor and the ledge placement so the ledges hug the slope).
+local function coneRadius(h: number): number
+	return MOUNTAIN_BASE_R + (MOUNTAIN_TOP_R - MOUNTAIN_BASE_R) * (h / MOUNTAIN_HEIGHT)
+end
+
 
 -- ---------------------------------------------------------------------------
 -- Build helpers
@@ -131,11 +138,12 @@ local function buildIsland(parent: Instance)
 	})
 	island.Name = "Island"
 
-	-- Sand beach ring, slightly lower and wider, sitting at the waterline.
+	-- Sand beach ring, just above the waterline so the shoreline reads cleanly
+	-- (grass top y=0  >  sand top y=-0.5  >  water surface y=-2).
 	makePart({
 		Name = "Beach",
 		Size = Vector3.new(6, (ISLAND_RADIUS + BEACH_WIDTH) * 2, (ISLAND_RADIUS + BEACH_WIDTH) * 2),
-		CFrame = CFrame.new(0, -5, 0) * CFrame.Angles(0, 0, math.rad(90)),
+		CFrame = CFrame.new(0, -3.5, 0) * CFrame.Angles(0, 0, math.rad(90)),
 		Color = COLORS.Sand,
 		Material = Enum.Material.Sand,
 		Shape = Enum.PartType.Cylinder,
@@ -143,20 +151,36 @@ local function buildIsland(parent: Instance)
 	})
 end
 
+-- The water surface sits a couple of studs BELOW the grass top so the lake and
+-- the island never Z-fight / bleed into each other at the shoreline.
+local WATER_SURFACE = -2
+
 local function buildWater()
 	-- Carve a real Terrain water lake. We first clear a generous block of any
 	-- existing terrain around the island, then fill a shallower block with
 	-- water. FillBlock uses a CFrame centre + size.
 	local terrain = Workspace.Terrain
 
-	local clearCenter = CFrame.new(0, -WATER_DEPTH / 2 - 2, 0)
-	local clearSize = Vector3.new(WATER_RADIUS * 2, WATER_DEPTH + 4, WATER_RADIUS * 2)
+	local clearCenter = CFrame.new(0, -WATER_DEPTH / 2, 0)
+	local clearSize = Vector3.new(WATER_RADIUS * 2, WATER_DEPTH + 8, WATER_RADIUS * 2)
 	terrain:FillBlock(clearCenter, clearSize, Enum.Material.Air)
 
-	-- Fill water up to y = 0 (the island/beach waterline).
-	local waterCenter = CFrame.new(0, -WATER_DEPTH / 2, 0)
-	local waterSize = Vector3.new(WATER_RADIUS * 2, WATER_DEPTH, WATER_RADIUS * 2)
-	terrain:FillBlock(waterCenter, waterSize, Enum.Material.Water)
+	-- Fill water up to WATER_SURFACE (below the island/beach so they don't merge).
+	local fillTop = WATER_SURFACE
+	local fillCenter = CFrame.new(0, fillTop - WATER_DEPTH / 2, 0)
+	local fillSize = Vector3.new(WATER_RADIUS * 2, WATER_DEPTH, WATER_RADIUS * 2)
+	terrain:FillBlock(fillCenter, fillSize, Enum.Material.Water)
+end
+
+-- Sculpts the mountain from Terrain rock by stacking balls of decreasing radius
+-- up a vertical axis, so it blends naturally into the world.
+local function buildMountain()
+	local terrain = Workspace.Terrain
+	local steps = 38
+	for i = 0, steps do
+		local h = (i / steps) * MOUNTAIN_HEIGHT
+		terrain:FillBall(Vector3.new(MOUNTAIN_X, h, MOUNTAIN_Z), coneRadius(h), Enum.Material.Rock)
+	end
 end
 
 local function buildDock(parent: Instance)
@@ -317,49 +341,51 @@ local function buildScenery(parent: Instance)
 	end
 end
 
--- Builds an ascending floating-platform parkour off the island's -X side, with a
--- glowing coin reward at the top. The reward grants coins (server-authoritative)
--- with a per-player cooldown so it can't be farmed.
+-- Builds the parkour as rocky ledges climbing the mountain's east face up to a
+-- glowing coin reward near the summit. The reward grants coins (server-
+-- authoritative) with a per-player cooldown so it can't be farmed.
 local function buildParkour(parent: Instance)
 	local model = Instance.new("Model")
 	model.Name = "Parkour"
 	model.Parent = parent
 
-	-- Start just off the island edge, ascending outward over the water.
-	local pos = Vector3.new(-(ISLAND_RADIUS - 10), 4, -14)
-	local lastPlatformPos = pos
-
+	-- Ledges hug the mountain's +X (east) face, stepping inward + up along the
+	-- slope with a zig-zag in Z. Pads shrink as you climb, for tight landings.
 	for i = 1, PARKOUR_PLATFORMS do
-		local isLast = i == PARKOUR_PLATFORMS
-		-- Pads shrink as you climb (5 studs at the bottom down to 3 at the top),
-		-- so landings get more precise the higher you go.
 		local frac = (i - 1) / math.max(1, PARKOUR_PLATFORMS - 1)
+		local h = 3 + frac * (MOUNTAIN_HEIGHT - 9)
+		local r = coneRadius(h) + 2 -- jut out from the rock slope
+		local zz = (if i % 2 == 0 then 1 else -1) * 4.5
 		local dim = math.max(3, 5 - math.floor(frac * 2 + 0.5))
-		local size = if isLast then Vector3.new(10, 1, 10) else Vector3.new(dim, 1, dim)
-		local color = if isLast then COLORS.Reward else PARKOUR_COLORS[((i - 1) % #PARKOUR_COLORS) + 1]
 
 		makePart({
-			Name = if isLast then "Summit" else "Platform" .. i,
-			Size = size,
-			CFrame = CFrame.new(pos),
-			Color = color,
-			Material = if isLast then Enum.Material.WoodPlanks else Enum.Material.SmoothPlastic,
+			Name = "Ledge" .. i,
+			Size = Vector3.new(dim, 1, dim + 1),
+			CFrame = CFrame.new(MOUNTAIN_X + r, h, MOUNTAIN_Z + zz),
+			Color = COLORS.LedgeRock,
+			Material = Enum.Material.Slate,
 			Parent = model,
 		})
-
-		lastPlatformPos = pos
-
-		-- Next platform: step outward (-X) and up, zig-zagging in Z so jumps
-		-- alternate direction. Gaps are tuned to be reachable with a default jump.
-		local dz = if i % 2 == 0 then 9 else -9
-		pos += Vector3.new(-8.5, 3.9, dz)
 	end
 
-	-- Glowing reward beacon on the summit (walk into it to claim).
+	-- Flat summit ledge near the top of the east face (reachable from the last
+	-- climbing ledge), where the reward sits.
+	local summitHeight = MOUNTAIN_HEIGHT - 2
+	local summitPos = Vector3.new(MOUNTAIN_X + coneRadius(summitHeight) + 2, summitHeight, MOUNTAIN_Z)
+	makePart({
+		Name = "Summit",
+		Size = Vector3.new(9, 1, 9),
+		CFrame = CFrame.new(summitPos),
+		Color = COLORS.Reward,
+		Material = Enum.Material.WoodPlanks,
+		Parent = model,
+	})
+
+	-- Glowing reward beacon above the summit ledge (walk into it to claim).
 	local reward = makePart({
 		Name = "ParkourReward",
 		Size = Vector3.new(4, 4, 4),
-		CFrame = CFrame.new(lastPlatformPos + Vector3.new(0, 4, 0)),
+		CFrame = CFrame.new(summitPos + Vector3.new(0, 4, 0)),
 		Color = COLORS.Reward,
 		Material = Enum.Material.Neon,
 		CanCollide = false,
@@ -493,7 +519,8 @@ function MapBuilder:Build(): Folder
 	-- Cosmetic, environment-dependent steps run guarded so a failure on any
 	-- given Studio/runtime configuration can never abort map creation (and with
 	-- it the rest of server startup). The island + spawn above always succeed.
-	pcall(buildWater)   -- Terrain is a singleton under Workspace.
+	pcall(buildWater)    -- Fill the lake first...
+	pcall(buildMountain) -- ...then punch the rock mountain up through it.
 	pcall(tuneLighting)
 
 	return mapFolder
