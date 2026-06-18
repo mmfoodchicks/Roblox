@@ -58,13 +58,13 @@ local PARKOUR_STEP_UP = 2.8    -- Height gained per ledge.
 local PARKOUR_CHORD = 9        -- Horizontal jump distance between ledges.
 local PARKOUR_LEDGE_OUT = 3    -- How far ledges jut from the rock slope.
 
--- The mountain the parkour climbs (sculpted from Terrain rock so it meshes with
--- the world). Positioned on the island's -X side, clear of the dock (+Z).
-local MOUNTAIN_X = -70
+-- The mountain dominates the island. It is sculpted from Terrain rock and has a
+-- walk-through tunnel + cavern carved under it (where the chests live).
+local MOUNTAIN_X = 0
 local MOUNTAIN_Z = 0
-local MOUNTAIN_HEIGHT = 130
-local MOUNTAIN_BASE_R = 55
-local MOUNTAIN_TOP_R = 9
+local MOUNTAIN_HEIGHT = 150
+local MOUNTAIN_BASE_R = 130
+local MOUNTAIN_TOP_R = 10
 
 -- A small, fixed palette so the scene reads cleanly.
 local COLORS = {
@@ -186,11 +186,40 @@ end
 -- up a vertical axis, so it blends naturally into the world.
 local function buildMountain()
 	local terrain = Workspace.Terrain
-	local steps = 38
+	local steps = 52
 	for i = 0, steps do
 		local h = (i / steps) * MOUNTAIN_HEIGHT
 		terrain:FillBall(Vector3.new(MOUNTAIN_X, h, MOUNTAIN_Z), coneRadius(h), Enum.Material.Rock)
 	end
+end
+
+-- Cavern / tunnel constants (shared by the carve + the chest placement).
+local CAVERN_HEIGHT = 22 -- head-room of the carved space
+local CAVERN_HALF = 38   -- half-width of the central cavern room
+
+-- Carves a walk-through tunnel along Z through the base of the mountain, opening
+-- into a central cavern (where the chests live). MUST run AFTER buildMountain so
+-- it removes the rock that was just placed.
+local function buildTunnel()
+	local terrain = Workspace.Terrain
+	-- Main corridor, south <-> north, at ground level.
+	terrain:FillBlock(
+		CFrame.new(MOUNTAIN_X, CAVERN_HEIGHT / 2, MOUNTAIN_Z),
+		Vector3.new(24, CAVERN_HEIGHT, (MOUNTAIN_BASE_R + 40) * 2),
+		Enum.Material.Air
+	)
+	-- A west <-> east corridor too, so the tunnel is a crossroads.
+	terrain:FillBlock(
+		CFrame.new(MOUNTAIN_X, CAVERN_HEIGHT / 2, MOUNTAIN_Z),
+		Vector3.new((MOUNTAIN_BASE_R + 40) * 2, CAVERN_HEIGHT, 24),
+		Enum.Material.Air
+	)
+	-- The central cavern room.
+	terrain:FillBlock(
+		CFrame.new(MOUNTAIN_X, CAVERN_HEIGHT / 2 + 1, MOUNTAIN_Z),
+		Vector3.new(CAVERN_HALF * 2, CAVERN_HEIGHT + 2, CAVERN_HALF * 2),
+		Enum.Material.Air
+	)
 end
 
 local function buildDock(parent: Instance)
@@ -323,7 +352,7 @@ local function buildScenery(parent: Instance)
 		if math.abs(angle - math.pi / 2) < 0.5 then
 			continue
 		end
-		local radius = ISLAND_RADIUS * 0.72 + rng:NextNumber(-12, 12)
+		local radius = ISLAND_RADIUS * 0.88 + rng:NextNumber(-10, 10)
 		local x = math.cos(angle) * radius
 		local z = math.sin(angle) * radius
 		-- Skip any tree that would land inside the mountain footprint.
@@ -356,113 +385,205 @@ local function buildScenery(parent: Instance)
 	end
 end
 
--- A vertical rock cylinder (the cliff body) capped with grass — a "mesa" you can
--- climb. Returns the world-space top centre so callers can place things on it.
-local function buildMesaBody(parent: Instance, x: number, z: number, radius: number, height: number): Vector3
-	-- Rock body: a Cylinder's round axis is local X, so rotating 90° about Z
-	-- stands it up vertically. Size.X is the height; Size.Y/Z the diameter.
-	makePart({
-		Name = "Cliff",
-		Size = Vector3.new(height, radius * 2, radius * 2),
-		CFrame = CFrame.new(x, height / 2, z) * CFrame.Angles(0, 0, math.rad(90)),
-		Color = COLORS.Cliff,
-		Material = Enum.Material.Rock,
-		Shape = Enum.PartType.Cylinder,
-		Parent = parent,
-	})
-	-- Grass cap on top.
-	makePart({
-		Name = "Top",
-		Size = Vector3.new(3, radius * 2, radius * 2),
-		CFrame = CFrame.new(x, height, z) * CFrame.Angles(0, 0, math.rad(90)),
-		Color = COLORS.Grass,
-		Material = Enum.Material.Grass,
-		Shape = Enum.PartType.Cylinder,
-		Parent = parent,
-	})
-	return Vector3.new(x, height + 1.5, z)
-end
+-- A small fishing dock jutting from the island edge into the water at `angle`.
+local function buildMiniDock(parent: Instance, angle: number)
+	local dirX, dirZ = math.cos(angle), math.sin(angle)
+	local innerR = ISLAND_RADIUS - 12
+	local length = 38
+	local midR = innerR + length / 2
+	local center = Vector3.new(dirX * midR, 0.6, dirZ * midR)
+	local outward = Vector3.new(dirX * (midR + 10), 0.6, dirZ * (midR + 10))
 
--- A sloped walk-path ramp from a ground point up to a high point.
-local function buildRamp(parent: Instance, fromPos: Vector3, toPos: Vector3, width: number)
-	local length = (toPos - fromPos).Magnitude
-	local mid = (fromPos + toPos) / 2
 	makePart({
-		Name = "Path",
-		Size = Vector3.new(width, 1, length),
-		CFrame = CFrame.lookAt(mid, toPos),
-		Color = COLORS.Path,
-		Material = Enum.Material.Ground,
+		Name = "MiniDeck",
+		Size = Vector3.new(7, 1, length),
+		CFrame = CFrame.lookAt(center, outward),
+		Color = COLORS.Wood,
+		Material = Enum.Material.WoodPlanks,
 		Parent = parent,
 	})
-	-- Low rock kerbs along both edges so the path reads as carved into the cliff.
+
+	-- Posts at the far (water) end.
+	local perp = Vector3.new(-dirZ, 0, dirX)
+	local farEnd = Vector3.new(dirX * (innerR + length), 0, dirZ * (innerR + length))
 	for _, side in ipairs({ -1, 1 }) do
-		local kerb = makePart({
-			Name = "Kerb",
-			Size = Vector3.new(0.6, 1.6, length),
-			CFrame = CFrame.lookAt(mid, toPos) * CFrame.new(side * (width / 2), 0.6, 0),
-			Color = COLORS.Cliff,
-			Material = Enum.Material.Rock,
+		makePart({
+			Name = "Post",
+			Size = Vector3.new(1, 12, 1),
+			CFrame = CFrame.new(farEnd + perp * (side * 2.6) + Vector3.new(0, -3, 0)),
+			Color = COLORS.WoodDark,
+			Material = Enum.Material.Wood,
 			Parent = parent,
 		})
-		kerb.Name = "Kerb"
 	end
 end
 
--- The mesas (raised "areas") and shoreline cliff outcrops. The flat island stays
--- the walkable ground; these add the cliffs + ramp walk-paths up to each area.
-local MESAS = {
-	{ x = 72, z = -52, r = 34, h = 24 },
-	{ x = 8, z = -132, r = 42, h = 32 },
-	{ x = -122, z = 78, r = 30, h = 20 },
-	{ x = 120, z = 74, r = 28, h = 18 },
+local function buildMiniDocks(parent: Instance)
+	local model = Instance.new("Model")
+	model.Name = "MiniDocks"
+	model.Parent = parent
+	-- Spread around the coast; the +Z (pi/2) wedge is left for the main dock.
+	local angles = { 0, math.pi * 0.33, math.pi * 0.95, math.pi * 1.25, math.pi * 1.55, math.pi * 1.85 }
+	for _, a in ipairs(angles) do
+		buildMiniDock(model, a)
+	end
+end
+
+-- Chests living in the cavern under the mountain. Each gives a one-time reward
+-- per player per server (server-authoritative), so they're treasure to find, not
+-- a farm. Coins for most; one drops a premium Key.
+local CHESTS = {
+	{ x = -18, z = -20, kind = "Coins", amount = 300 },
+	{ x = 18, z = -20, kind = "Coins", amount = 300 },
+	{ x = -18, z = 20, kind = "Coins", amount = 400 },
+	{ x = 18, z = 20, kind = "Keys", amount = 1 },
+	{ x = 0, z = 0, kind = "Coins", amount = 600 },
 }
 
-local function buildCliffs(parent: Instance)
+local function buildChest(parent: Instance, c: { x: number, z: number, kind: string, amount: number })
+	local glow = if c.kind == "Keys" then Color3.fromRGB(120, 220, 240) else COLORS.Reward
+	local base = Vector3.new(c.x, 0.8, c.z)
+
+	local body = makePart({
+		Name = "Chest",
+		Size = Vector3.new(5, 3, 3.6),
+		CFrame = CFrame.new(base + Vector3.new(0, 1.5, 0)),
+		Color = COLORS.Wood,
+		Material = Enum.Material.WoodPlanks,
+		Parent = parent,
+	})
+	makePart({
+		Name = "Band",
+		Size = Vector3.new(5.1, 0.6, 3.7),
+		CFrame = CFrame.new(base + Vector3.new(0, 1.5, 0)),
+		Color = glow,
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+		Parent = parent,
+	})
+	local lid = makePart({
+		Name = "Lid",
+		Size = Vector3.new(5, 1.2, 3.6),
+		CFrame = CFrame.new(base + Vector3.new(0, 3.1, 0)),
+		Color = COLORS.WoodDark,
+		Material = Enum.Material.Wood,
+		Parent = parent,
+	})
+
+	local light = Instance.new("PointLight")
+	light.Color = glow
+	light.Range = 16
+	light.Brightness = 2.5
+	light.Parent = body
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Size = UDim2.fromOffset(120, 36)
+	billboard.StudsOffset = Vector3.new(0, 3, 0)
+	billboard.AlwaysOnTop = true
+	billboard.Parent = body
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.GothamBold
+	label.TextScaled = true
+	label.TextColor3 = Color3.fromRGB(255, 240, 180)
+	label.TextStrokeTransparency = 0.3
+	label.Text = "Chest"
+	label.Parent = billboard
+
+	local claimed: { [Player]: boolean } = {}
+	body.Touched:Connect(function(hit: BasePart)
+		local character = hit.Parent
+		if character == nil then
+			return
+		end
+		local player = Players:GetPlayerFromCharacter(character)
+		if player == nil or claimed[player] then
+			return
+		end
+
+		local ok: number?
+		if c.kind == "Keys" then
+			ok = DataService:AddKeys(player, c.amount)
+		else
+			ok = DataService:AwardCoins(player, c.amount)
+		end
+		if ok == nil then
+			return
+		end
+		claimed[player] = true
+
+		FishingNetwork:FireClient(player, "Notice", {
+			text = string.format("Opened a chest!  +%d %s", c.amount, if c.kind == "Keys" then "keys" else "coins"),
+		})
+	end)
+
+	Players.PlayerRemoving:Connect(function(player: Player)
+		claimed[player] = nil
+	end)
+	-- `lid` kept as a handle for future open animations.
+	lid:SetAttribute("IsChestLid", true)
+end
+
+-- Lays the cave floor + lighting under the mountain and places the chests.
+local function buildUnderMountain(parent: Instance)
 	local model = Instance.new("Model")
-	model.Name = "Cliffs"
+	model.Name = "UnderMountain"
 	model.Parent = parent
 
-	for _, m in ipairs(MESAS) do
-		local top = buildMesaBody(model, m.x, m.z, m.r, m.h)
+	local corridorLen = (MOUNTAIN_BASE_R + 40) * 2
 
-		-- A tree on top so each mesa reads as its own little area to discover.
-		buildTree(model, Vector3.new(m.x, m.h + 1.5, m.z))
+	-- Slate floors for the cavern + both corridors.
+	makePart({
+		Name = "CavernFloor",
+		Size = Vector3.new(CAVERN_HALF * 2, 1, CAVERN_HALF * 2),
+		CFrame = CFrame.new(MOUNTAIN_X, 0.3, MOUNTAIN_Z),
+		Color = COLORS.Cliff,
+		Material = Enum.Material.Slate,
+		Parent = model,
+	})
+	makePart({
+		Name = "CorridorFloorNS",
+		Size = Vector3.new(24, 1, corridorLen),
+		CFrame = CFrame.new(MOUNTAIN_X, 0.3, MOUNTAIN_Z),
+		Color = COLORS.Cliff,
+		Material = Enum.Material.Slate,
+		Parent = model,
+	})
+	makePart({
+		Name = "CorridorFloorEW",
+		Size = Vector3.new(corridorLen, 1, 24),
+		CFrame = CFrame.new(MOUNTAIN_X, 0.3, MOUNTAIN_Z),
+		Color = COLORS.Cliff,
+		Material = Enum.Material.Slate,
+		Parent = model,
+	})
 
-		-- Ramp up the side that faces the island centre (toward where players walk
-		-- from spawn). Runs from the ground up onto the grass cap.
-		local center = Vector3.new(m.x, 0, m.z)
-		local toward = if center.Magnitude > 0.1 then -center.Unit else Vector3.new(0, 0, 1)
-		local run = m.h * 1.7
-		local fromPos = center + toward * (m.r + run) + Vector3.new(0, 0.5, 0)
-		local toPos = Vector3.new(top.X, m.h, top.Z) + toward * (m.r - 3)
-		buildRamp(model, fromPos, toPos, 10)
+	-- Glowing lamps near the ceiling so the corridors aren't pitch black.
+	for d = -MOUNTAIN_BASE_R + 12, MOUNTAIN_BASE_R - 12, 34 do
+		for _, pos in ipairs({
+			Vector3.new(MOUNTAIN_X, CAVERN_HEIGHT - 3, MOUNTAIN_Z + d),
+			Vector3.new(MOUNTAIN_X + d, CAVERN_HEIGHT - 3, MOUNTAIN_Z),
+		}) do
+			local lamp = makePart({
+				Name = "Lamp",
+				Size = Vector3.new(1.2, 1.2, 1.2),
+				CFrame = CFrame.new(pos),
+				Color = Color3.fromRGB(255, 235, 200),
+				Material = Enum.Material.Neon,
+				CanCollide = false,
+				Parent = model,
+			})
+			local lampLight = Instance.new("PointLight")
+			lampLight.Range = 30
+			lampLight.Brightness = 1.6
+			lampLight.Color = Color3.fromRGB(255, 235, 200)
+			lampLight.Parent = lamp
+		end
 	end
 
-	-- Shoreline cliff outcrops around the coast (skipping the dock/beach side) so
-	-- there are cliffsides all around the island.
-	local rng = Random.new(778899)
-	for i = 1, 8 do
-		local angle = (i / 8) * math.pi * 2
-		if math.abs(angle - math.pi / 2) < 0.7 then
-			continue -- keep the beach/dock side open
-		end
-		local radius = ISLAND_RADIUS * 0.86
-		local x = math.cos(angle) * radius
-		local z = math.sin(angle) * radius
-		local r = rng:NextNumber(9, 16)
-		local h = rng:NextNumber(14, 30)
-		makePart({
-			Name = "Outcrop",
-			Size = Vector3.new(h, r * 2, r * 2),
-			CFrame = CFrame.new(x, h / 2 - 2, z)
-				* CFrame.Angles(0, 0, math.rad(90))
-				* CFrame.Angles(rng:NextNumber(-0.08, 0.08), 0, rng:NextNumber(-0.08, 0.08)),
-			Color = COLORS.Cliff,
-			Material = Enum.Material.Rock,
-			Shape = Enum.PartType.Cylinder,
-			Parent = model,
-		})
+	for _, c in ipairs(CHESTS) do
+		buildChest(model, c)
 	end
 end
 
@@ -615,8 +736,9 @@ local function buildHub(parent: Instance)
 	end
 
 	local spacing = 18
-	local startX = -((count - 1) * spacing) / 2
-	local hubZ = SPAWN_Z - 22 -- just behind the spawn pad
+	-- On the beach beside spawn (west), clear of the mountain footprint.
+	local startX = -72 - ((count - 1) * spacing) / 2
+	local hubZ = SPAWN_Z + 12
 
 	local teleporting: { [Player]: boolean } = {}
 
@@ -778,7 +900,8 @@ function MapBuilder:Build(): Folder
 	buildDock(mapFolder)
 	buildSpawn(mapFolder)
 	buildScenery(mapFolder)
-	buildCliffs(mapFolder)
+	buildMiniDocks(mapFolder)
+	buildUnderMountain(mapFolder) -- cave floor, lamps + chests
 	buildParkour(mapFolder)
 	buildHub(mapFolder)
 
@@ -788,7 +911,8 @@ function MapBuilder:Build(): Folder
 	-- given Studio/runtime configuration can never abort map creation (and with
 	-- it the rest of server startup). The island + spawn above always succeed.
 	pcall(buildWater)    -- Fill the lake first...
-	pcall(buildMountain) -- ...then punch the rock mountain up through it.
+	pcall(buildMountain) -- ...then punch the huge rock mountain up through it...
+	pcall(buildTunnel)   -- ...then carve the walk-through tunnel + cavern.
 	pcall(tuneLighting)
 
 	return mapFolder
