@@ -16,6 +16,9 @@ local LocalPlayer = Players.LocalPlayer
 
 local WALK_SPEED = 16
 local SPRINT_SPEED = 28
+-- Steep terrain (the mountain) can't be walked up past this angle, so the only
+-- way up is the parkour. Normal flat ground / docks are unaffected.
+local MAX_SLOPE_ANGLE = 50
 
 local SprintController = {}
 
@@ -33,6 +36,7 @@ local function apply()
 	local humanoid = currentHumanoid()
 	if humanoid ~= nil then
 		humanoid.WalkSpeed = if sprinting then SPRINT_SPEED else WALK_SPEED
+		humanoid.MaxSlopeAngle = MAX_SLOPE_ANGLE
 	end
 end
 

@@ -142,6 +142,9 @@
           "SprintController": {
             "$path": "src/Client/Controllers/SprintController.luau"
           },
+          "MerchantController": {
+            "$path": "src/Client/Controllers/MerchantController.luau"
+          },
           "FishingController": {
             "$path": "src/Client/Controllers/FishingController.luau"
           }

@@ -51,20 +51,22 @@ local DOCK_HEIGHT = 6          -- Deck height above water level.
 -- the island as an area to discover.
 local SPAWN_Z = ISLAND_RADIUS - 34
 
--- Parkour course tuning — a long spiral climb wrapping the mountain to the top.
+-- Parkour course tuning — a long, hard spiral climb. Jumps are wide so it can't
+-- be cheesed; players must discover and master it.
 local PARKOUR_REWARD = 250     -- Coins for reaching the summit...
 local PARKOUR_COOLDOWN = 90    -- ...claimable at most once per this many seconds.
-local PARKOUR_STEP_UP = 2.8    -- Height gained per ledge.
-local PARKOUR_CHORD = 9        -- Horizontal jump distance between ledges.
-local PARKOUR_LEDGE_OUT = 3    -- How far ledges jut from the rock slope.
+local PARKOUR_STEP_UP = 3.4    -- Height gained per ledge.
+local PARKOUR_CHORD = 11       -- Horizontal jump distance between ledges (harder).
+local PARKOUR_LEDGE_OUT = 2.5  -- How far ledges jut from the rock slope.
 
--- The mountain dominates the island. It is sculpted from Terrain rock and has a
--- walk-through tunnel + cavern carved under it (where the chests live).
+-- The mountain dominates the island. Sculpted from Terrain rock, it is steep and
+-- smooth (so it can't be free-climbed — see SprintController's MaxSlopeAngle),
+-- with a walk-through tunnel + market cavern carved underneath.
 local MOUNTAIN_X = 0
 local MOUNTAIN_Z = 0
-local MOUNTAIN_HEIGHT = 150
-local MOUNTAIN_BASE_R = 130
-local MOUNTAIN_TOP_R = 10
+local MOUNTAIN_HEIGHT = 175
+local MOUNTAIN_BASE_R = 115
+local MOUNTAIN_TOP_R = 9
 
 -- A small, fixed palette so the scene reads cleanly.
 local COLORS = {
@@ -186,7 +188,9 @@ end
 -- up a vertical axis, so it blends naturally into the world.
 local function buildMountain()
 	local terrain = Workspace.Terrain
-	local steps = 52
+	-- Many steps so the slope is smooth (few footholds) — climbing is blocked by
+	-- the steep angle, not by relying on bumps.
+	local steps = 90
 	for i = 0, steps do
 		local h = (i / steps) * MOUNTAIN_HEIGHT
 		terrain:FillBall(Vector3.new(MOUNTAIN_X, h, MOUNTAIN_Z), coneRadius(h), Enum.Material.Rock)
@@ -429,103 +433,80 @@ local function buildMiniDocks(parent: Instance)
 	end
 end
 
--- Chests living in the cavern under the mountain. Each gives a one-time reward
--- per player per server (server-authoritative), so they're treasure to find, not
--- a farm. Coins for most; one drops a premium Key.
-local CHESTS = {
-	{ x = -18, z = -20, kind = "Coins", amount = 300 },
-	{ x = 18, z = -20, kind = "Coins", amount = 300 },
-	{ x = -18, z = 20, kind = "Coins", amount = 400 },
-	{ x = 18, z = 20, kind = "Keys", amount = 1 },
-	{ x = 0, z = 0, kind = "Coins", amount = 600 },
+-- The market under the mountain: merchant stands the player walks up to. Each
+-- carries a ProximityPrompt that opens the matching shop UI (handled client-side
+-- by MerchantController via the "OpenUI" attribute). The prompt itself only shows
+-- when the player is close, so the cavern stays clean until you approach a stand.
+local MERCHANTS = {
+	{ x = -24, z = -18, ui = "Inventory", title = "Fish Market", action = "Sell Fish", color = Color3.fromRGB(88, 196, 120) },
+	{ x = 24, z = -18, ui = "Shop", title = "Rod & Luck Smith", action = "Upgrade", color = Color3.fromRGB(64, 156, 255) },
+	{ x = -24, z = 18, ui = "Crates", title = "Crate Trader", action = "Open Crates", color = Color3.fromRGB(220, 110, 110) },
+	{ x = 24, z = 18, ui = "Store", title = "Premium Bazaar", action = "Browse", color = Color3.fromRGB(232, 196, 96) },
 }
 
-local function buildChest(parent: Instance, c: { x: number, z: number, kind: string, amount: number })
-	local glow = if c.kind == "Keys" then Color3.fromRGB(120, 220, 240) else COLORS.Reward
-	local base = Vector3.new(c.x, 0.8, c.z)
+local function buildMerchantStand(parent: Instance, m: { x: number, z: number, ui: string, title: string, action: string, color: Color3 })
+	-- Face the stand toward the cavern centre.
+	local toCenter = Vector3.new(-m.x, 0, -m.z)
+	local facing = if toCenter.Magnitude > 0.1 then toCenter.Unit else Vector3.new(0, 0, 1)
+	local base = CFrame.lookAt(Vector3.new(m.x, 0, m.z), Vector3.new(m.x, 0, m.z) + facing)
 
-	local body = makePart({
-		Name = "Chest",
-		Size = Vector3.new(5, 3, 3.6),
-		CFrame = CFrame.new(base + Vector3.new(0, 1.5, 0)),
+	-- Counter.
+	local counter = makePart({
+		Name = "Counter",
+		Size = Vector3.new(8, 3.5, 2),
+		CFrame = base * CFrame.new(0, 1.75, 0),
 		Color = COLORS.Wood,
 		Material = Enum.Material.WoodPlanks,
 		Parent = parent,
 	})
+	-- Posts + a colored awning so each stand reads at a glance.
+	for _, side in ipairs({ -1, 1 }) do
+		makePart({
+			Name = "Post",
+			Size = Vector3.new(0.6, 8, 0.6),
+			CFrame = base * CFrame.new(side * 3.7, 4, -0.5),
+			Color = COLORS.WoodDark,
+			Material = Enum.Material.Wood,
+			Parent = parent,
+		})
+	end
 	makePart({
-		Name = "Band",
-		Size = Vector3.new(5.1, 0.6, 3.7),
-		CFrame = CFrame.new(base + Vector3.new(0, 1.5, 0)),
-		Color = glow,
+		Name = "Awning",
+		Size = Vector3.new(9, 0.6, 4),
+		CFrame = base * CFrame.new(0, 8, -1.2) * CFrame.Angles(math.rad(-14), 0, 0),
+		Color = m.color,
+		Material = Enum.Material.SmoothPlastic,
+		Parent = parent,
+	})
+	-- A glowing sign block in the awning colour, lighting the stall.
+	local sign = makePart({
+		Name = "Sign",
+		Size = Vector3.new(7, 1.4, 0.4),
+		CFrame = base * CFrame.new(0, 6, -0.4),
+		Color = m.color,
 		Material = Enum.Material.Neon,
 		CanCollide = false,
 		Parent = parent,
 	})
-	local lid = makePart({
-		Name = "Lid",
-		Size = Vector3.new(5, 1.2, 3.6),
-		CFrame = CFrame.new(base + Vector3.new(0, 3.1, 0)),
-		Color = COLORS.WoodDark,
-		Material = Enum.Material.Wood,
-		Parent = parent,
-	})
-
 	local light = Instance.new("PointLight")
-	light.Color = glow
-	light.Range = 16
-	light.Brightness = 2.5
-	light.Parent = body
+	light.Color = m.color
+	light.Range = 18
+	light.Brightness = 2
+	light.Parent = sign
 
-	local billboard = Instance.new("BillboardGui")
-	billboard.Size = UDim2.fromOffset(120, 36)
-	billboard.StudsOffset = Vector3.new(0, 3, 0)
-	billboard.AlwaysOnTop = true
-	billboard.Parent = body
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.fromScale(1, 1)
-	label.BackgroundTransparency = 1
-	label.Font = Enum.Font.GothamBold
-	label.TextScaled = true
-	label.TextColor3 = Color3.fromRGB(255, 240, 180)
-	label.TextStrokeTransparency = 0.3
-	label.Text = "Chest"
-	label.Parent = billboard
-
-	local claimed: { [Player]: boolean } = {}
-	body.Touched:Connect(function(hit: BasePart)
-		local character = hit.Parent
-		if character == nil then
-			return
-		end
-		local player = Players:GetPlayerFromCharacter(character)
-		if player == nil or claimed[player] then
-			return
-		end
-
-		local ok: number?
-		if c.kind == "Keys" then
-			ok = DataService:AddKeys(player, c.amount)
-		else
-			ok = DataService:AwardCoins(player, c.amount)
-		end
-		if ok == nil then
-			return
-		end
-		claimed[player] = true
-
-		FishingNetwork:FireClient(player, "Notice", {
-			text = string.format("Opened a chest!  +%d %s", c.amount, if c.kind == "Keys" then "keys" else "coins"),
-		})
-	end)
-
-	Players.PlayerRemoving:Connect(function(player: Player)
-		claimed[player] = nil
-	end)
-	-- `lid` kept as a handle for future open animations.
-	lid:SetAttribute("IsChestLid", true)
+	-- The interaction. Only visible when the player is near; opens the UI.
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.ActionText = m.action
+	prompt.ObjectText = m.title
+	prompt.KeyboardKeyCode = Enum.KeyCode.E
+	prompt.HoldDuration = 0
+	prompt.MaxActivationDistance = 10
+	prompt.RequiresLineOfSight = false
+	prompt:SetAttribute("OpenUI", m.ui)
+	prompt.Parent = counter
 end
 
--- Lays the cave floor + lighting under the mountain and places the chests.
+-- Lays the cave floor + lighting under the mountain and places the merchant stands.
 local function buildUnderMountain(parent: Instance)
 	local model = Instance.new("Model")
 	model.Name = "UnderMountain"
@@ -582,8 +563,8 @@ local function buildUnderMountain(parent: Instance)
 		end
 	end
 
-	for _, c in ipairs(CHESTS) do
-		buildChest(model, c)
+	for _, m in ipairs(MERCHANTS) do
+		buildMerchantStand(model, m)
 	end
 end
 
@@ -605,26 +586,16 @@ local function buildParkour(parent: Instance)
 	local h = startH
 	local angle = 0
 	local index = 0
-	local lastPos = Vector3.new(MOUNTAIN_X + coneRadius(startH) + PARKOUR_LEDGE_OUT, startH, MOUNTAIN_Z)
 
-	-- A small signpost at the base so players discover the climb.
-	makePart({
-		Name = "ClimbSign",
-		Size = Vector3.new(1, 7, 1),
-		CFrame = CFrame.new(lastPos + Vector3.new(3, 3, 0)),
-		Color = COLORS.WoodDark,
-		Material = Enum.Material.Wood,
-		Parent = model,
-	})
-
-	while h <= topH and index < 200 do
+	-- No signpost: the climb is meant to be discovered, not advertised.
+	while h <= topH and index < 240 do
 		index += 1
 		local r = coneRadius(h) + PARKOUR_LEDGE_OUT
 		local pos = Vector3.new(MOUNTAIN_X + math.cos(angle) * r, h, MOUNTAIN_Z + math.sin(angle) * r)
 
-		-- Pads shrink with height for tighter landings near the top.
+		-- Smaller pads (harder, tighter landings), shrinking further with height.
 		local frac = (h - startH) / (topH - startH)
-		local dim = math.max(3, 5 - math.floor(frac * 2 + 0.5))
+		local dim = math.max(2.5, 4 - math.floor(frac * 2 + 0.5))
 
 		makePart({
 			Name = "Ledge" .. index,
@@ -634,7 +605,6 @@ local function buildParkour(parent: Instance)
 			Material = Enum.Material.Slate,
 			Parent = model,
 		})
-		lastPos = pos
 
 		-- Advance: around the circle by a reachable chord, and up one step.
 		local ratio = math.clamp(PARKOUR_CHORD / (2 * r), 0, 1)
@@ -673,11 +643,12 @@ local function buildParkour(parent: Instance)
 	light.Brightness = 3
 	light.Parent = reward
 
-	-- Floating call-out.
+	-- Floating call-out — only visible once you're near the summit (discovery).
 	local billboard = Instance.new("BillboardGui")
 	billboard.Size = UDim2.fromOffset(180, 44)
 	billboard.StudsOffset = Vector3.new(0, 3, 0)
 	billboard.AlwaysOnTop = true
+	billboard.MaxDistance = 35
 	billboard.Parent = reward
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.fromScale(1, 1)
@@ -784,39 +755,21 @@ local function buildHub(parent: Instance)
 		light.Brightness = 2
 		light.Parent = surface
 
-		-- Label above the portal.
-		local billboard = Instance.new("BillboardGui")
-		billboard.Size = UDim2.fromOffset(220, 50)
-		billboard.StudsOffset = Vector3.new(0, 8, 0)
-		billboard.AlwaysOnTop = true
-		billboard.Parent = surface
-		local label = Instance.new("TextLabel")
-		label.Size = UDim2.fromScale(1, 1)
-		label.BackgroundTransparency = 1
-		label.Font = Enum.Font.GothamBold
-		label.TextScaled = true
-		label.TextColor3 = Color3.fromRGB(255, 255, 255)
-		label.TextStrokeTransparency = 0.3
-		label.Text = if dest.PlaceId == 0 then dest.Name .. "\n(Coming soon)" else "▶ " .. dest.Name
-		label.Parent = billboard
+		-- Walk-up prompt (only shows when the player is close); press E to travel.
+		local prompt = Instance.new("ProximityPrompt")
+		prompt.ObjectText = dest.Name
+		prompt.ActionText = if dest.PlaceId == 0 then "Coming soon" else "Travel"
+		prompt.KeyboardKeyCode = Enum.KeyCode.E
+		prompt.HoldDuration = 0.4
+		prompt.MaxActivationDistance = 9
+		prompt.RequiresLineOfSight = false
+		prompt.Enabled = dest.PlaceId ~= 0
+		prompt.Parent = surface
 
-		surface.Touched:Connect(function(hit: BasePart)
-			local character = hit.Parent
-			if character == nil then
+		prompt.Triggered:Connect(function(player: Player)
+			if dest.PlaceId == 0 or teleporting[player] then
 				return
 			end
-			local player = Players:GetPlayerFromCharacter(character)
-			if player == nil or teleporting[player] then
-				return
-			end
-
-			if dest.PlaceId == 0 then
-				FishingNetwork:FireClient(player, "Notice", {
-					text = dest.Name .. " isn't set up yet.",
-				})
-				return
-			end
-
 			teleporting[player] = true
 			FishingNetwork:FireClient(player, "Notice", { text = "Teleporting to " .. dest.Name .. "..." })
 			local ok, err = pcall(function()
