@@ -10,14 +10,14 @@
 	  * Load a session-locked profile per player on join.
 	  * Reconcile the profile against the latest template so newly-added fields
 	    are back-filled safely for returning players.
-	  * Expose narrow, validated mutators (AwardCoins / AddToInventory) so no
-	    other system touches Profile.Data directly.
-	  * Release profiles cleanly on leave, and handle ProfileService's
-	    session-lock steal callback by kicking the affected player.
+	  * Expose narrow, validated mutators so no other system touches
+	    Profile.Data directly.
+	  * Replicate the authoritative data to the owning client (DataNetwork) and
+	    raise a server-side Changed signal after every mutation.
+	  * Release profiles cleanly on leave, kicking on a lost session lock.
 
-	All public mutators are no-ops (returning false) when the profile is absent,
-	which makes call-sites safe during the brief load window or after a player
-	has already left.
+	All public mutators are no-ops (returning nil/false) when the profile is
+	absent, which keeps call-sites safe during the load window or after leave.
 ]]
 
 local Players = game:GetService("Players")
@@ -25,6 +25,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local ProfileService = require(ReplicatedStorage.Packages.ProfileService)
+
+local DataNetwork = ReplicatedStorage:WaitForChild("DataNetwork") :: RemoteEvent
 
 -- ---------------------------------------------------------------------------
 -- Types
@@ -41,15 +43,21 @@ export type InventoryEntry = {
 	CaughtAt: number, -- os.time() of the catch
 }
 
+export type PlayerStats = {
+	TotalCaught: number,
+	CoinsEarned: number,
+}
+
 export type PlayerData = {
 	Coins: number,
 	ActiveRod: string,
 	LuckLevel: number,
 	Inventory: { InventoryEntry },
+	OwnedRods: { [string]: boolean },
+	Stats: PlayerStats,
 }
 
--- ProfileService is untyped at the module boundary; we describe the slice of
--- the Profile object we actually use so the rest of the file stays strict.
+-- The slice of the ProfileService Profile object we actually use.
 type Profile = {
 	Data: PlayerData,
 	Reconcile: (self: Profile) -> (),
@@ -63,17 +71,18 @@ type Profile = {
 -- Template & store
 -- ---------------------------------------------------------------------------
 
--- The default data template. ProfileService deep-copies this for new players,
--- and :Reconcile() uses it to back-fill missing keys for existing players.
 local PROFILE_TEMPLATE: PlayerData = {
 	Coins = 0,
 	ActiveRod = "BasicRod",
 	LuckLevel = 1,
 	Inventory = {},
+	OwnedRods = { BasicRod = true },
+	Stats = {
+		TotalCaught = 0,
+		CoinsEarned = 0,
+	},
 }
 
--- Use a distinct store key in Studio so test play sessions never collide with
--- live production data.
 local STORE_KEY = if RunService:IsStudio() then "PlayerData_Studio" else "PlayerData_Live"
 
 local ProfileStore = ProfileService.GetProfileStore(STORE_KEY, PROFILE_TEMPLATE)
@@ -84,23 +93,38 @@ local ProfileStore = ProfileService.GetProfileStore(STORE_KEY, PROFILE_TEMPLATE)
 
 local DataService = {}
 
--- Live profiles, keyed by Player. Cleared on release.
 local profiles: { [Player]: Profile } = {}
 
--- Fired when a profile finishes loading, so dependent services can react.
+-- Server-side signal raised whenever a player's data changes (used by
+-- LeaderstatsService and any other reactive system).
+local changedBindable = Instance.new("BindableEvent")
+DataService.Changed = changedBindable.Event :: RBXScriptSignal
+
 local profileLoadedBindable = Instance.new("BindableEvent")
 DataService.ProfileLoaded = profileLoadedBindable.Event :: RBXScriptSignal
+
+-- ---------------------------------------------------------------------------
+-- Replication
+-- ---------------------------------------------------------------------------
+
+-- Pushes the authoritative data to the owning client and raises Changed. Called
+-- after every successful mutation so the UI and leaderstats stay in lock-step
+-- with the server.
+local function sync(player: Player, data: PlayerData)
+	if player:IsDescendantOf(Players) then
+		DataNetwork:FireClient(player, data)
+	end
+	changedBindable:Fire(player, data)
+end
 
 -- ---------------------------------------------------------------------------
 -- Internal helpers
 -- ---------------------------------------------------------------------------
 
 local function onProfileLoaded(player: Player, profile: Profile)
-	profile:AddUserId(player.UserId) -- GDPR-compliant association for erasure.
-	profile:Reconcile() -- Safely add any newly-introduced template fields.
+	profile:AddUserId(player.UserId)
+	profile:Reconcile()
 
-	-- If the session lock is lost (the profile is loaded elsewhere, or the
-	-- server is shutting down), drop our reference and remove the player.
 	profile:ListenToRelease(function()
 		profiles[player] = nil
 		player:Kick("Your data was loaded on another server. Please rejoin.")
@@ -109,79 +133,81 @@ local function onProfileLoaded(player: Player, profile: Profile)
 	if player:IsDescendantOf(Players) then
 		profiles[player] = profile
 		profileLoadedBindable:Fire(player, profile.Data)
+		sync(player, profile.Data) -- Initial snapshot.
 	else
-		-- Player left before the async load finished — release immediately.
 		profile:Release()
 	end
 end
 
 local function loadProfileAsync(player: Player)
-	-- "ForceLoad" steals the session lock from a dead/other server after a
-	-- short retry window, which is the standard single-place configuration.
 	local profile = ProfileStore:LoadProfileAsync("Player_" .. player.UserId, "ForceLoad") :: Profile?
 
 	if profile ~= nil then
 		onProfileLoaded(player, profile)
 	else
-		-- The lock could not be acquired (rare). Kick so the player can retry on
-		-- a fresh server rather than play with unsaved data.
 		player:Kick("Unable to load your data. Please rejoin.")
 	end
 end
 
+-- Returns a live, active profile for a player or nil. Centralises the guard.
+local function activeProfile(player: Player): Profile?
+	local profile = profiles[player]
+	if profile == nil or not profile:IsActive() then
+		return nil
+	end
+	return profile
+end
+
 -- ---------------------------------------------------------------------------
--- Public API
+-- Read API
 -- ---------------------------------------------------------------------------
 
---[[
-	GetProfile
-	Returns the live profile for a player, or nil if it is not (yet) loaded or
-	has been released. Callers that need the data slice should prefer the
-	dedicated mutators below.
-]]
 function DataService:GetProfile(player: Player): Profile?
 	return profiles[player]
 end
 
---[[
-	GetData
-	Convenience accessor returning the mutable PlayerData table, or nil.
-]]
 function DataService:GetData(player: Player): PlayerData?
 	local profile = profiles[player]
 	return if profile ~= nil then profile.Data else nil
 end
 
+-- ---------------------------------------------------------------------------
+-- Mutators (each replicates on success)
+-- ---------------------------------------------------------------------------
+
 --[[
 	AwardCoins
-	Transactionally adds `amount` coins (may be negative for spends, but never
-	below zero). Returns the new balance, or nil if the profile is unavailable.
+	Adds `amount` coins (may be negative for spends; never drops below zero).
+	Positive awards also accrue the lifetime CoinsEarned stat. Returns the new
+	balance, or nil if the profile is unavailable.
 ]]
 function DataService:AwardCoins(player: Player, amount: number): number?
-	local profile = profiles[player]
-	if profile == nil or not profile:IsActive() then
+	local profile = activeProfile(player)
+	if profile == nil then
 		return nil
 	end
 
-	-- Reject non-finite / NaN inputs that would corrupt the saved balance.
 	if type(amount) ~= "number" or amount ~= amount or amount == math.huge or amount == -math.huge then
 		return nil
 	end
 
-	local newBalance = math.max(0, profile.Data.Coins + amount)
-	profile.Data.Coins = newBalance
-	return newBalance
+	profile.Data.Coins = math.max(0, profile.Data.Coins + amount)
+	if amount > 0 then
+		profile.Data.Stats.CoinsEarned += amount
+	end
+
+	sync(player, profile.Data)
+	return profile.Data.Coins
 end
 
 --[[
 	AddToInventory
-	Appends a caught-item record to the player's inventory and returns the new
-	inventory size, or nil if the profile is unavailable. The entry is normalised
-	here so persisted data is always well-formed regardless of caller.
+	Appends a normalised caught-item record and bumps the TotalCaught stat.
+	Returns the new inventory size, or nil if unavailable.
 ]]
 function DataService:AddToInventory(player: Player, itemData: InventoryEntry): number?
-	local profile = profiles[player]
-	if profile == nil or not profile:IsActive() then
+	local profile = activeProfile(player)
+	if profile == nil then
 		return nil
 	end
 
@@ -194,29 +220,75 @@ function DataService:AddToInventory(player: Player, itemData: InventoryEntry): n
 	}
 
 	table.insert(profile.Data.Inventory, entry)
+	profile.Data.Stats.TotalCaught += 1
+
+	sync(player, profile.Data)
 	return #profile.Data.Inventory
 end
 
 --[[
-	SetActiveRod / SetLuckLevel
-	Small validated setters kept here so progression systems never poke Data
-	directly. Both return success.
+	ClearInventory
+	Empties the inventory and returns the total resale value that was held
+	(summed before clearing), or nil if unavailable. Used by the sell flow.
+]]
+function DataService:ClearInventory(player: Player): number?
+	local profile = activeProfile(player)
+	if profile == nil then
+		return nil
+	end
+
+	local total = 0
+	for _, entry in ipairs(profile.Data.Inventory) do
+		total += entry.Value
+	end
+	profile.Data.Inventory = {}
+
+	sync(player, profile.Data)
+	return total
+end
+
+--[[
+	SetActiveRod
+	Equips a rod the player owns. Returns success.
 ]]
 function DataService:SetActiveRod(player: Player, rodId: string): boolean
-	local profile = profiles[player]
-	if profile == nil or not profile:IsActive() then
+	local profile = activeProfile(player)
+	if profile == nil then
 		return false
 	end
-	profile.Data.ActiveRod = tostring(rodId)
+	if not profile.Data.OwnedRods[rodId] then
+		return false
+	end
+	profile.Data.ActiveRod = rodId
+	sync(player, profile.Data)
 	return true
 end
 
+--[[
+	SetOwnedRod
+	Grants (or revokes) ownership of a rod. Returns success.
+]]
+function DataService:SetOwnedRod(player: Player, rodId: string, owned: boolean): boolean
+	local profile = activeProfile(player)
+	if profile == nil then
+		return false
+	end
+	profile.Data.OwnedRods[rodId] = owned or nil
+	sync(player, profile.Data)
+	return true
+end
+
+--[[
+	SetLuckLevel
+	Sets the luck level (clamped to >= 1). Returns success.
+]]
 function DataService:SetLuckLevel(player: Player, level: number): boolean
-	local profile = profiles[player]
-	if profile == nil or not profile:IsActive() then
+	local profile = activeProfile(player)
+	if profile == nil then
 		return false
 	end
 	profile.Data.LuckLevel = math.max(1, math.floor(level))
+	sync(player, profile.Data)
 	return true
 end
 
@@ -224,11 +296,6 @@ end
 -- Lifecycle
 -- ---------------------------------------------------------------------------
 
---[[
-	Init
-	Wires player join/leave. Called once by the server bootstrap. Players who
-	are already present (e.g. on a hot script reload) are handled too.
-]]
 function DataService:Init()
 	local function onPlayerAdded(player: Player)
 		task.spawn(loadProfileAsync, player)
@@ -239,7 +306,7 @@ function DataService:Init()
 	Players.PlayerRemoving:Connect(function(player: Player)
 		local profile = profiles[player]
 		if profile ~= nil then
-			profile:Release() -- Triggers ListenToRelease -> clears `profiles`.
+			profile:Release()
 		end
 	end)
 

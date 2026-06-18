@@ -14,15 +14,25 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local Services = ServerScriptService:WaitForChild("Services")
 
--- MapBuilder runs first so the world (including the SpawnLocation) exists before
--- any player can spawn. DataService then loads profiles, and FishingService —
--- which reads those profiles — initialises last.
+-- World first, so the SpawnLocation exists before any player can spawn.
 local MapBuilder = require(Services:WaitForChild("MapBuilder"))
+local RodToolBuilder = require(Services:WaitForChild("RodToolBuilder"))
+
+-- Data layer next; everything below reads from it.
 local DataService = require(Services:WaitForChild("DataService"))
+local LeaderstatsService = require(Services:WaitForChild("LeaderstatsService"))
+
+-- Gameplay + economy, which depend on the data layer.
 local FishingService = require(Services:WaitForChild("FishingService"))
+local ShopService = require(Services:WaitForChild("ShopService"))
 
 MapBuilder:Init()
+RodToolBuilder:Init()
+
 DataService:Init()
+LeaderstatsService:Init()
+
 FishingService:Init()
+ShopService:Init()
 
 print("[FishingSimulator] Server initialised.")

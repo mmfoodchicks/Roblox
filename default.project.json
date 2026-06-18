@@ -9,11 +9,20 @@
       "FishingNetwork": {
         "$className": "RemoteEvent"
       },
+      "DataNetwork": {
+        "$className": "RemoteEvent"
+      },
+      "ShopFunction": {
+        "$className": "RemoteFunction"
+      },
 
       "Shared": {
         "$className": "Folder",
         "LootManager": {
           "$path": "src/Shared/LootManager.luau"
+        },
+        "GameConfig": {
+          "$path": "src/Shared/GameConfig.luau"
         }
       },
 
@@ -40,6 +49,15 @@
         "FishingService": {
           "$path": "src/Server/Services/FishingService.luau"
         },
+        "ShopService": {
+          "$path": "src/Server/Services/ShopService.luau"
+        },
+        "LeaderstatsService": {
+          "$path": "src/Server/Services/LeaderstatsService.luau"
+        },
+        "RodToolBuilder": {
+          "$path": "src/Server/Services/RodToolBuilder.luau"
+        },
         "MapBuilder": {
           "$path": "src/Server/Services/MapBuilder.luau"
         }
@@ -58,6 +76,21 @@
 
         "Controllers": {
           "$className": "Folder",
+          "UiUtil": {
+            "$path": "src/Client/Controllers/UiUtil.luau"
+          },
+          "DataController": {
+            "$path": "src/Client/Controllers/DataController.luau"
+          },
+          "HudController": {
+            "$path": "src/Client/Controllers/HudController.luau"
+          },
+          "ShopController": {
+            "$path": "src/Client/Controllers/ShopController.luau"
+          },
+          "InventoryController": {
+            "$path": "src/Client/Controllers/InventoryController.luau"
+          },
           "FishingController": {
             "$path": "src/Client/Controllers/FishingController.luau"
           }

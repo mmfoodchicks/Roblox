@@ -57,7 +57,6 @@ local gui: ScreenGui? = nil
 local minigameFrame: Frame? = nil
 local targetZone: Frame? = nil
 local marker: Frame? = nil
-local promptLabel: TextLabel? = nil
 local rewardLabel: TextLabel? = nil
 
 -- ---------------------------------------------------------------------------
@@ -153,7 +152,6 @@ local function buildUi()
 	minigameFrame = frame
 	targetZone = target
 	marker = mark
-	promptLabel = prompt
 	rewardLabel = reward
 
 	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
@@ -420,7 +418,7 @@ local function onCatchResult(data: { [string]: any })
 		or rarityColors[item.Rarity]
 		or Color3.fromRGB(255, 255, 255)
 
-	showToast(string.format("Caught %s! +%d coins", tostring(item.Name), tonumber(data.value) or 0), color)
+	showToast(string.format("Caught %s!  (worth %d 🪙)", tostring(item.Name), tonumber(data.value) or 0), color)
 	playCatchBurst(color)
 end
 
