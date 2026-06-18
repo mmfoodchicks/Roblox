@@ -34,7 +34,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local LootManager = require(ReplicatedStorage.Shared.LootManager)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local DataService = require(ServerScriptService.Services.DataService)
-local MonetizationService = require(ServerScriptService.Services.MonetizationService)
+local BoostService = require(ServerScriptService.Services.BoostService)
 
 local FishingNetwork = ReplicatedStorage:WaitForChild("FishingNetwork") :: RemoteEvent
 
@@ -184,10 +184,10 @@ local function handleResolveMinigame(player: Player, payload: unknown)
 	end
 
 	-- Server-authoritative roll. Luck combines the player's luck level, the rod's
-	-- multiplier, and any monetization perks (Lucky Charm / VIP / Luck Potion).
+	-- multiplier, and all stacking boosts (passes, pets, luck potions).
 	local luck = GameConfig.GetLuckMultiplier(data.LuckLevel)
 		* session.rod.LuckMultiplier
-		* MonetizationService:GetLuckMultiplier(player)
+		* BoostService:GetLuckMultiplier(player)
 	local caught = LootManager.RollCatch(luck, session.rod.ValueMultiplier)
 
 	-- Persist into the inventory (coins are realised on sell, not on catch).

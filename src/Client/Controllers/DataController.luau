@@ -36,6 +36,11 @@ export type PlayerData = {
 	Passes: { [string]: boolean },
 	IsPremium: boolean,
 	PurchaseHistory: { [string]: boolean },
+	Pets: { [string]: number },
+	EquippedPets: { string },
+	Keys: number,
+	LastDailyClaim: number,
+	DailyStreak: number,
 }
 
 local DataController = {}

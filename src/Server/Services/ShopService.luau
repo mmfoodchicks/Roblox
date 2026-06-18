@@ -24,7 +24,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local DataService = require(ServerScriptService.Services.DataService)
-local MonetizationService = require(ServerScriptService.Services.MonetizationService)
+local BoostService = require(ServerScriptService.Services.BoostService)
 
 local ShopFunction = ReplicatedStorage:WaitForChild("ShopFunction") :: RemoteFunction
 
@@ -114,7 +114,7 @@ local function sellAll(player: Player): Response
 	if base == nil then
 		return fail("Data unavailable.")
 	end
-	local multiplier = MonetizationService:GetCoinMultiplier(player)
+	local multiplier = BoostService:GetCoinMultiplier(player)
 	local earned = math.floor(base * multiplier + 0.5)
 	DataService:AwardCoins(player, earned)
 	return { success = true, earned = earned, base = base, multiplier = multiplier }

@@ -61,6 +61,12 @@ export type PlayerData = {
 	Passes: { [string]: boolean },
 	IsPremium: boolean,
 	PurchaseHistory: { [string]: boolean },
+	-- Gacha / pets / daily.
+	Pets: { [string]: number },     -- petId -> count owned
+	EquippedPets: { string },       -- ordered list of equipped pet ids
+	Keys: number,                   -- premium crate currency
+	LastDailyClaim: number,         -- os.time() of last daily claim
+	DailyStreak: number,            -- current daily streak
 }
 
 -- The slice of the ProfileService Profile object we actually use.
@@ -90,6 +96,11 @@ local PROFILE_TEMPLATE: PlayerData = {
 	Passes = {},
 	IsPremium = false,
 	PurchaseHistory = {},
+	Pets = {},
+	EquippedPets = {},
+	Keys = 0,
+	LastDailyClaim = 0,
+	DailyStreak = 0,
 }
 
 local STORE_KEY = if RunService:IsStudio() then "PlayerData_Studio" else "PlayerData_Live"
@@ -348,6 +359,67 @@ function DataService:RecordPurchase(player: Player, purchaseId: string): boolean
 		return false
 	end
 	profile.Data.PurchaseHistory[purchaseId] = true
+	return true
+end
+
+--[[
+	AddPet
+	Increments the owned count of a pet. Returns the new count, or nil if
+	unavailable.
+]]
+function DataService:AddPet(player: Player, petId: string, amount: number?): number?
+	local profile = activeProfile(player)
+	if profile == nil then
+		return nil
+	end
+	local count = (profile.Data.Pets[petId] or 0) + (amount or 1)
+	profile.Data.Pets[petId] = count
+	sync(player, profile.Data)
+	return count
+end
+
+--[[
+	SetEquippedPets
+	Replaces the equipped-pet list wholesale (caller is responsible for
+	validating ownership and slot limits). Returns success.
+]]
+function DataService:SetEquippedPets(player: Player, petIds: { string }): boolean
+	local profile = activeProfile(player)
+	if profile == nil then
+		return false
+	end
+	profile.Data.EquippedPets = petIds
+	sync(player, profile.Data)
+	return true
+end
+
+--[[
+	AddKeys
+	Adds `amount` keys (may be negative for spends; never below zero). Returns the
+	new balance, or nil if unavailable.
+]]
+function DataService:AddKeys(player: Player, amount: number): number?
+	local profile = activeProfile(player)
+	if profile == nil then
+		return nil
+	end
+	profile.Data.Keys = math.max(0, profile.Data.Keys + amount)
+	sync(player, profile.Data)
+	return profile.Data.Keys
+end
+
+--[[
+	SetDailyClaim
+	Records the daily streak and claim timestamp. Returns success.
+]]
+function DataService:SetDailyClaim(player: Player, streak: number, claimTime: number): boolean
+	local profile = activeProfile(player)
+	if profile == nil then
+		return false
+	end
+	profile.Data.DailyStreak = streak
+	profile.Data.LastDailyClaim = claimTime
+	sync(player, profile.Data)
 	return true
 end
 

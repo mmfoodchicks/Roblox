@@ -18,14 +18,20 @@ local Services = ServerScriptService:WaitForChild("Services")
 local MapBuilder = require(Services:WaitForChild("MapBuilder"))
 local RodToolBuilder = require(Services:WaitForChild("RodToolBuilder"))
 
--- Data layer next; everything below reads from it.
+-- Data layer; everything below reads from it.
 local DataService = require(Services:WaitForChild("DataService"))
+
+-- Boosts hub + the systems that grant rewards into it.
+local BoostService = require(Services:WaitForChild("BoostService"))
+local PetService = require(Services:WaitForChild("PetService"))
+local CrateService = require(Services:WaitForChild("CrateService"))
+local DailyRewardService = require(Services:WaitForChild("DailyRewardService"))
+
+-- Monetization (consults BoostService + CrateService), then leaderboard.
+local MonetizationService = require(Services:WaitForChild("MonetizationService"))
 local LeaderstatsService = require(Services:WaitForChild("LeaderstatsService"))
 
--- Monetization, which FishingService and ShopService consult for multipliers.
-local MonetizationService = require(Services:WaitForChild("MonetizationService"))
-
--- Gameplay + economy, which depend on the data + monetization layers.
+-- Core gameplay + economy, which depend on the data + boosts layers.
 local FishingService = require(Services:WaitForChild("FishingService"))
 local ShopService = require(Services:WaitForChild("ShopService"))
 
@@ -33,8 +39,14 @@ MapBuilder:Init()
 RodToolBuilder:Init()
 
 DataService:Init()
-LeaderstatsService:Init()
+
+BoostService:Init()
+PetService:Init()
+CrateService:Init()
+DailyRewardService:Init()
+
 MonetizationService:Init()
+LeaderstatsService:Init()
 
 FishingService:Init()
 ShopService:Init()

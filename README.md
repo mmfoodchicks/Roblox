@@ -132,6 +132,29 @@ StarterPlayer/StarterPlayerScripts
 > that item **Unavailable** and the server skips it — the game still runs.
 > See **Monetization setup** below.
 
+### Gacha crates & pets 🎰 (`CrateService` / `PetService`)
+- **Crates** (`CrateConfig`) roll weighted rewards: **Wooden** (coins),
+  **Golden** (coins), **Mythic** (keys). Pools drop **Pets**, coins, keys, and
+  luck potions. Rolls are server-authoritative; the client plays a spinning
+  **reveal animation** with the result.
+- **Pets** are the collectible hook: each grants a passive **luck/coin bonus**
+  while equipped, and bonuses **stack** across equipped slots (base 3, +2 with
+  the *Extra Pet Slots* pass). `PetService` validates ownership/slots; their
+  bonuses are summed by `BoostService`.
+- **Keys** are a premium currency — earned from daily rewards or bought with
+  Robux (key packs / direct Mythic-open product).
+
+### Daily rewards 📅 (`DailyRewardService`)
+- A 7-day escalating streak (`DailyConfig`) — coins, keys, a luck potion, and a
+  **free Octopus pet** on day 7. Claimable every 20h, resets if a day is missed.
+  The popup **auto-opens on join** when a reward is waiting (retention nudge).
+
+### `BoostService` (multiplier hub)
+- The single place that stacks **every** luck/coin multiplier — game passes,
+  Roblox Premium, equipped pets, and timed luck potions — so `FishingService`,
+  `ShopService` and the Auto Fisher all agree. Independent of the purchase
+  services to keep requires acyclic.
+
 ### `MapBuilder` (Server)
 - Procedurally builds the scene at boot — **no binary assets**, seeded for
   reproducibility: grass island + sand beach, a real **Terrain water** lake

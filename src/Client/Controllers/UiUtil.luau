@@ -28,7 +28,9 @@ UiUtil.Rarity = {
 	Common = Color3.fromRGB(170, 178, 184),
 	Uncommon = Color3.fromRGB(88, 196, 120),
 	Rare = Color3.fromRGB(64, 156, 255),
-	Legendary = Color3.fromRGB(190, 96, 255),
+	Epic = Color3.fromRGB(170, 96, 255),
+	Legendary = Color3.fromRGB(240, 180, 70),
+	Mythic = Color3.fromRGB(255, 90, 140),
 }
 
 -- Rounds a corner of `instance`.

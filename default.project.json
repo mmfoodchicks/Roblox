@@ -15,6 +15,18 @@
       "ShopFunction": {
         "$className": "RemoteFunction"
       },
+      "CrateFunction": {
+        "$className": "RemoteFunction"
+      },
+      "CrateNetwork": {
+        "$className": "RemoteEvent"
+      },
+      "PetFunction": {
+        "$className": "RemoteFunction"
+      },
+      "DailyFunction": {
+        "$className": "RemoteFunction"
+      },
 
       "Shared": {
         "$className": "Folder",
@@ -26,6 +38,12 @@
         },
         "MonetizationConfig": {
           "$path": "src/Shared/MonetizationConfig.luau"
+        },
+        "CrateConfig": {
+          "$path": "src/Shared/CrateConfig.luau"
+        },
+        "DailyConfig": {
+          "$path": "src/Shared/DailyConfig.luau"
         }
       },
 
@@ -54,6 +72,18 @@
         },
         "ShopService": {
           "$path": "src/Server/Services/ShopService.luau"
+        },
+        "BoostService": {
+          "$path": "src/Server/Services/BoostService.luau"
+        },
+        "PetService": {
+          "$path": "src/Server/Services/PetService.luau"
+        },
+        "CrateService": {
+          "$path": "src/Server/Services/CrateService.luau"
+        },
+        "DailyRewardService": {
+          "$path": "src/Server/Services/DailyRewardService.luau"
         },
         "MonetizationService": {
           "$path": "src/Server/Services/MonetizationService.luau"
@@ -99,6 +129,12 @@
           },
           "StoreController": {
             "$path": "src/Client/Controllers/StoreController.luau"
+          },
+          "CrateController": {
+            "$path": "src/Client/Controllers/CrateController.luau"
+          },
+          "DailyController": {
+            "$path": "src/Client/Controllers/DailyController.luau"
           },
           "FishingController": {
             "$path": "src/Client/Controllers/FishingController.luau"

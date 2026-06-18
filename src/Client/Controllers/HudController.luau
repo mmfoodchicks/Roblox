@@ -15,11 +15,14 @@ local UserInputService = game:GetService("UserInputService")
 
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local MonetizationConfig = require(ReplicatedStorage.Shared.MonetizationConfig)
+local CrateConfig = require(ReplicatedStorage.Shared.CrateConfig)
 local UiUtil = require(script.Parent.UiUtil)
 local DataController = require(script.Parent.DataController)
 local ShopController = require(script.Parent.ShopController)
 local InventoryController = require(script.Parent.InventoryController)
 local StoreController = require(script.Parent.StoreController)
+local CrateController = require(script.Parent.CrateController)
+local DailyController = require(script.Parent.DailyController)
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -29,6 +32,7 @@ local coinsLabel: TextLabel? = nil
 local rodLabel: TextLabel? = nil
 local luckLabel: TextLabel? = nil
 local valueLabel: TextLabel? = nil
+local keysLabel: TextLabel? = nil
 
 -- ---------------------------------------------------------------------------
 -- Construction
@@ -67,7 +71,7 @@ local function build()
 	-- Top-left stat row.
 	local stats = UiUtil.frame({
 		Name = "Stats",
-		Size = UDim2.fromOffset(700, 36),
+		Size = UDim2.fromOffset(900, 36),
 		Position = UDim2.fromOffset(12, 12),
 		Transparency = 1,
 		Parent = screen,
@@ -79,15 +83,16 @@ local function build()
 	statsLayout.Parent = stats
 
 	coinsLabel = statChip(stats, "Coins", 1)
-	valueLabel = statChip(stats, "Unsold", 2)
-	luckLabel = statChip(stats, "Luck", 3)
-	rodLabel = statChip(stats, "Rod", 4)
+	keysLabel = statChip(stats, "Keys", 2)
+	valueLabel = statChip(stats, "Unsold", 3)
+	luckLabel = statChip(stats, "Luck", 4)
+	rodLabel = statChip(stats, "Rod", 5)
 
 	-- Bottom-right action buttons.
 	local actions = UiUtil.frame({
 		Name = "Actions",
-		Size = UDim2.fromOffset(150, 148),
-		Position = UDim2.new(1, -162, 1, -160),
+		Size = UDim2.fromOffset(150, 256),
+		Position = UDim2.new(1, -162, 1, -268),
 		Transparency = 1,
 		Parent = screen,
 	})
@@ -110,6 +115,32 @@ local function build()
 		StoreController:Toggle()
 	end)
 
+	local crateBtn = UiUtil.button({
+		Name = "Crates",
+		Size = UDim2.fromOffset(150, 44),
+		Text = "🎁 Crates",
+		Color = UiUtil.Palette.Negative,
+		TextSize = 18,
+		Parent = actions,
+	})
+	crateBtn.LayoutOrder = 2
+	crateBtn.Activated:Connect(function()
+		CrateController:Toggle()
+	end)
+
+	local dailyBtn = UiUtil.button({
+		Name = "Daily",
+		Size = UDim2.fromOffset(150, 44),
+		Text = "📅 Daily",
+		Color = UiUtil.Palette.Positive,
+		TextSize = 18,
+		Parent = actions,
+	})
+	dailyBtn.LayoutOrder = 3
+	dailyBtn.Activated:Connect(function()
+		DailyController:Toggle()
+	end)
+
 	local shopBtn = UiUtil.button({
 		Name = "Shop",
 		Size = UDim2.fromOffset(150, 44),
@@ -118,7 +149,7 @@ local function build()
 		TextSize = 18,
 		Parent = actions,
 	})
-	shopBtn.LayoutOrder = 2
+	shopBtn.LayoutOrder = 4
 	shopBtn.Activated:Connect(function()
 		ShopController:Toggle()
 	end)
@@ -131,7 +162,7 @@ local function build()
 		TextSize = 18,
 		Parent = actions,
 	})
-	invBtn.LayoutOrder = 3
+	invBtn.LayoutOrder = 5
 	invBtn.Activated:Connect(function()
 		InventoryController:Toggle()
 	end)
@@ -144,8 +175,8 @@ end
 -- Refresh
 -- ---------------------------------------------------------------------------
 
--- Mirrors MonetizationService:GetCoinMultiplier for display only (passes +
--- Premium). The server remains authoritative for the actual payout.
+-- Mirrors BoostService:GetCoinMultiplier for display only (passes + Premium +
+-- equipped pets). The server remains authoritative for the actual payout.
 local function coinMultiplier(data: DataController.PlayerData): number
 	local multiplier = 1
 	for _, pass in pairs(MonetizationConfig.GamePasses) do
@@ -156,6 +187,14 @@ local function coinMultiplier(data: DataController.PlayerData): number
 	if data.IsPremium then
 		multiplier *= MonetizationConfig.PremiumCoinMultiplier
 	end
+	local petBonus = 0
+	for _, petId in ipairs(data.EquippedPets) do
+		local pet = CrateConfig.GetPet(petId)
+		if pet ~= nil then
+			petBonus += pet.CoinBonus
+		end
+	end
+	multiplier *= (1 + petBonus)
 	return multiplier
 end
 
@@ -164,6 +203,10 @@ local function refresh(data: DataController.PlayerData)
 		local mult = coinMultiplier(data)
 		local suffix = if mult > 1 then string.format("  (x%.2g)", mult) else ""
 		coinsLabel.Text = "🪙 " .. UiUtil.comma(data.Coins) .. suffix
+	end
+
+	if keysLabel ~= nil then
+		keysLabel.Text = "🔑 " .. UiUtil.comma(data.Keys)
 	end
 
 	if valueLabel ~= nil then

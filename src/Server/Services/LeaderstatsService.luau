@@ -10,7 +10,6 @@
 	truth.
 ]]
 
-local Players = game:GetService("Players")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local DataService = require(ServerScriptService.Services.DataService)

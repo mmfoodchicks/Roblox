@@ -31,6 +31,7 @@ export type GamePass = {
 	CoinMultiplier: number?, -- Multiplies coins earned from selling.
 	LuckMultiplier: number?, -- Multiplies luck on every catch.
 	AutoFish: boolean?,      -- Grants the server-side auto-fisher.
+	PetSlots: number?,       -- Extra equipped-pet slots.
 }
 
 export type Product = {
@@ -40,6 +41,8 @@ export type Product = {
 	Desc: string,
 	Order: number,
 	Coins: number?,         -- Instantly granted coins.
+	Keys: number?,          -- Instantly granted crate keys.
+	Crate: string?,         -- Opens this crate key on purchase.
 	LuckMultiplier: number?, -- Temporary luck multiplier...
 	LuckDuration: number?,   -- ...for this many seconds.
 }
@@ -85,6 +88,14 @@ MonetizationConfig.GamePasses = {
 		Order = 3,
 		AutoFish = true,
 	},
+	ExtraPetSlots = {
+		Key = "ExtraPetSlots",
+		Id = 0, -- TODO: paste your Extra Pet Slots game pass id
+		Name = "+2 Pet Slots",
+		Desc = "Equip 2 extra pets at once for bigger stacked boosts.",
+		Order = 4,
+		PetSlots = 2,
+	},
 } :: { [string]: GamePass }
 
 -- ---------------------------------------------------------------------------
@@ -124,6 +135,30 @@ MonetizationConfig.Products = {
 		Order = 4,
 		LuckMultiplier = 3,
 		LuckDuration = 600,
+	},
+	Keys5 = {
+		Key = "Keys5",
+		Id = 0, -- TODO: paste your 5 Keys product id
+		Name = "5 Crate Keys",
+		Desc = "5 keys to open Mythic Crates.",
+		Order = 5,
+		Keys = 5,
+	},
+	Keys25 = {
+		Key = "Keys25",
+		Id = 0, -- TODO: paste your 25 Keys product id
+		Name = "25 Crate Keys",
+		Desc = "25 keys — the best value for crate hunters.",
+		Order = 6,
+		Keys = 25,
+	},
+	MythicCrateOpen = {
+		Key = "MythicCrateOpen",
+		Id = 0, -- TODO: paste your Open Mythic Crate product id
+		Name = "Open a Mythic Crate",
+		Desc = "Instantly open a Mythic Crate — no key needed.",
+		Order = 7,
+		Crate = "MythicCrate",
 	},
 } :: { [string]: Product }
 
