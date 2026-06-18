@@ -46,9 +46,9 @@ local DOCK_WIDTH = 12
 local DOCK_HEIGHT = 6          -- Deck height above water level.
 
 -- Parkour course tuning.
-local PARKOUR_PLATFORMS = 11   -- Number of jumps.
-local PARKOUR_REWARD = 1500    -- Coins for reaching the top...
-local PARKOUR_COOLDOWN = 120   -- ...claimable at most once per this many seconds.
+local PARKOUR_PLATFORMS = 13   -- Number of jumps (more + tighter = harder).
+local PARKOUR_REWARD = 150     -- Coins for reaching the top (~10 common fish)...
+local PARKOUR_COOLDOWN = 90    -- ...claimable at most once per this many seconds.
 
 -- A small, fixed palette so the scene reads cleanly.
 local COLORS = {
@@ -116,10 +116,13 @@ end
 -- ---------------------------------------------------------------------------
 
 local function buildIsland(parent: Instance)
-	-- Grass disc (a flat cylinder reads as a round island).
+	-- Grass disc. A Roblox Cylinder's round axis is its local X, so Size.X is the
+	-- DISC THICKNESS and Size.Y/Z are the diameter; rotating 90° about Z stands
+	-- that thickness up vertically to lie the disc flat. (Getting this order
+	-- wrong builds a tall pillar instead of an island.)
 	local island = makePart({
 		Name = "Island",
-		Size = Vector3.new(ISLAND_RADIUS * 2, 8, ISLAND_RADIUS * 2),
+		Size = Vector3.new(8, ISLAND_RADIUS * 2, ISLAND_RADIUS * 2),
 		CFrame = CFrame.new(0, -4, 0) * CFrame.Angles(0, 0, math.rad(90)),
 		Color = COLORS.Grass,
 		Material = Enum.Material.Grass,
@@ -131,7 +134,7 @@ local function buildIsland(parent: Instance)
 	-- Sand beach ring, slightly lower and wider, sitting at the waterline.
 	makePart({
 		Name = "Beach",
-		Size = Vector3.new((ISLAND_RADIUS + BEACH_WIDTH) * 2, 6, (ISLAND_RADIUS + BEACH_WIDTH) * 2),
+		Size = Vector3.new(6, (ISLAND_RADIUS + BEACH_WIDTH) * 2, (ISLAND_RADIUS + BEACH_WIDTH) * 2),
 		CFrame = CFrame.new(0, -5, 0) * CFrame.Angles(0, 0, math.rad(90)),
 		Color = COLORS.Sand,
 		Material = Enum.Material.Sand,
@@ -328,7 +331,7 @@ local function buildParkour(parent: Instance)
 
 	for i = 1, PARKOUR_PLATFORMS do
 		local isLast = i == PARKOUR_PLATFORMS
-		local size = if isLast then Vector3.new(14, 1, 14) else Vector3.new(6, 1, 6)
+		local size = if isLast then Vector3.new(12, 1, 12) else Vector3.new(5, 1, 5)
 		local color = if isLast then COLORS.Reward else PARKOUR_COLORS[((i - 1) % #PARKOUR_COLORS) + 1]
 
 		makePart({
@@ -344,8 +347,8 @@ local function buildParkour(parent: Instance)
 
 		-- Next platform: step outward (-X) and up, zig-zagging in Z so jumps
 		-- alternate direction. Gaps are tuned to be reachable with a default jump.
-		local dz = if i % 2 == 0 then 6 else -6
-		pos += Vector3.new(-7.5, 3.6, dz)
+		local dz = if i % 2 == 0 then 8 else -8
+		pos += Vector3.new(-8.5, 3.7, dz)
 	end
 
 	-- Glowing reward beacon on the summit (walk into it to claim).
