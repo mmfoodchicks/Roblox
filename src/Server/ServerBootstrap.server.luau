@@ -14,10 +14,14 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local Services = ServerScriptService:WaitForChild("Services")
 
--- DataService must initialise first: FishingService reads loaded profiles.
+-- MapBuilder runs first so the world (including the SpawnLocation) exists before
+-- any player can spawn. DataService then loads profiles, and FishingService —
+-- which reads those profiles — initialises last.
+local MapBuilder = require(Services:WaitForChild("MapBuilder"))
 local DataService = require(Services:WaitForChild("DataService"))
 local FishingService = require(Services:WaitForChild("FishingService"))
 
+MapBuilder:Init()
 DataService:Init()
 FishingService:Init()
 

@@ -31,7 +31,8 @@ ServerScriptService
 ├── ServerBootstrap             Script        -- SSA server entry point
 └── Services/
     ├── DataService             ModuleScript  -- ProfileService-backed persistence
-    └── FishingService          ModuleScript  -- server-authoritative loop
+    ├── FishingService          ModuleScript  -- server-authoritative loop
+    └── MapBuilder              ModuleScript  -- procedural map generation
 
 StarterPlayer/StarterPlayerScripts
 ├── ClientBootstrap             LocalScript    -- SSA client entry point
@@ -70,6 +71,16 @@ StarterPlayer/StarterPlayerScripts
   realistic window (not before the bite, not after the deadline), consumes the
   session to block replays, rolls the catch with `LootManager`, persists via
   `DataService`, then fires `CatchResult` for UI + particles.
+
+### `MapBuilder` (Server)
+- Procedurally builds the whole scene at boot — **no binary assets**, fully
+  reproducible (seeded scenery). Produces: a grass island + sand beach, a real
+  **Terrain water** lake (`Terrain:FillBlock`), a wooden dock with posts/railing
+  and an `IsFishingSpot`-tagged end marker, a `SpawnLocation`, seeded trees and
+  shoreline rocks, and tuned Lighting/Atmosphere/Sky.
+- Idempotent `:Build()` clears any prior `Workspace.GeneratedMap` (and the
+  default `Baseplate`) so hot reloads never duplicate geometry. Runs first in
+  the bootstrap so the spawn exists before players join.
 
 ### `FishingController` (Client)
 - Binds the player's rod `Tool.Activated` → fires `RequestCast` and spawns a

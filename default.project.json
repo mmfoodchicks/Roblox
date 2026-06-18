@@ -39,6 +39,9 @@
         },
         "FishingService": {
           "$path": "src/Server/Services/FishingService.luau"
+        },
+        "MapBuilder": {
+          "$path": "src/Server/Services/MapBuilder.luau"
         }
       }
     },
