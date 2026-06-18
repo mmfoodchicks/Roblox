@@ -68,20 +68,20 @@ local function build()
 	screen.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	screen.DisplayOrder = 2
 
-	-- Bottom-left stat row — clear of the Roblox chat (top-left) and the action
-	-- buttons (bottom-right).
+	-- Left-edge vertical stack — clear of the chat (top-left), the hotbar
+	-- (bottom-centre) and the action buttons (bottom-right).
 	local stats = UiUtil.frame({
 		Name = "Stats",
-		Size = UDim2.fromOffset(900, 36),
-		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.new(0, 12, 1, -12),
+		Size = UDim2.fromOffset(170, 220),
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, 12, 0.5, 40),
 		Transparency = 1,
 		Parent = screen,
 	})
 	local statsLayout = Instance.new("UIListLayout")
-	statsLayout.FillDirection = Enum.FillDirection.Horizontal
-	statsLayout.Padding = UDim.new(0, 8)
-	statsLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+	statsLayout.FillDirection = Enum.FillDirection.Vertical
+	statsLayout.Padding = UDim.new(0, 6)
+	statsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
 	statsLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	statsLayout.Parent = stats
 
