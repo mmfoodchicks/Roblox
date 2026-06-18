@@ -1,0 +1,72 @@
+{
+  "name": "IncrementalFishingSimulator",
+  "tree": {
+    "$className": "DataModel",
+
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+
+      "FishingNetwork": {
+        "$className": "RemoteEvent"
+      },
+
+      "Shared": {
+        "$className": "Folder",
+        "LootManager": {
+          "$path": "src/Shared/LootManager.luau"
+        }
+      },
+
+      "Packages": {
+        "$className": "Folder",
+        "ProfileService": {
+          "$path": "src/ReplicatedStorage/ProfileService.luau"
+        }
+      }
+    },
+
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+
+      "ServerBootstrap": {
+        "$path": "src/Server/ServerBootstrap.server.luau"
+      },
+
+      "Services": {
+        "$className": "Folder",
+        "DataService": {
+          "$path": "src/Server/Services/DataService.luau"
+        },
+        "FishingService": {
+          "$path": "src/Server/Services/FishingService.luau"
+        }
+      }
+    },
+
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+
+        "ClientBootstrap": {
+          "$path": "src/Client/ClientBootstrap.client.luau"
+        },
+
+        "Controllers": {
+          "$className": "Folder",
+          "FishingController": {
+            "$path": "src/Client/Controllers/FishingController.luau"
+          }
+        }
+      }
+    },
+
+    "Workspace": {
+      "$className": "Workspace",
+      "$properties": {
+        "FilteringEnabled": true
+      }
+    }
+  }
+}
