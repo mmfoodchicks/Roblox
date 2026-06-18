@@ -35,20 +35,32 @@ local LeaderstatsService = require(Services:WaitForChild("LeaderstatsService"))
 local FishingService = require(Services:WaitForChild("FishingService"))
 local ShopService = require(Services:WaitForChild("ShopService"))
 
-MapBuilder:Init()
-RodToolBuilder:Init()
+-- Each service is initialised in isolation: a failure in one (e.g. a cosmetic
+-- map step on an unusual Studio configuration) is logged but can never abort the
+-- others, so core gameplay (rod, data, fishing, economy) always comes up.
+local function safeInit(name: string, service: { Init: (any) -> () })
+	local ok, err = pcall(function()
+		service:Init()
+	end)
+	if not ok then
+		warn(string.format("[FishingSimulator] %s:Init() failed: %s", name, tostring(err)))
+	end
+end
 
-DataService:Init()
+safeInit("MapBuilder", MapBuilder)
+safeInit("RodToolBuilder", RodToolBuilder)
 
-BoostService:Init()
-PetService:Init()
-CrateService:Init()
-DailyRewardService:Init()
+safeInit("DataService", DataService)
 
-MonetizationService:Init()
-LeaderstatsService:Init()
+safeInit("BoostService", BoostService)
+safeInit("PetService", PetService)
+safeInit("CrateService", CrateService)
+safeInit("DailyRewardService", DailyRewardService)
 
-FishingService:Init()
-ShopService:Init()
+safeInit("MonetizationService", MonetizationService)
+safeInit("LeaderstatsService", LeaderstatsService)
+
+safeInit("FishingService", FishingService)
+safeInit("ShopService", ShopService)
 
 print("[FishingSimulator] Server initialised.")

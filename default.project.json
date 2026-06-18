@@ -148,6 +148,13 @@
       "$properties": {
         "FilteringEnabled": true
       }
+    },
+
+    "Lighting": {
+      "$className": "Lighting",
+      "$properties": {
+        "Technology": "Future"
+      }
     }
   }
 }

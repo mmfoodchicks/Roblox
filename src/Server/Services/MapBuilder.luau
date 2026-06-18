@@ -294,7 +294,10 @@ local function buildScenery(parent: Instance)
 end
 
 local function tuneLighting()
-	Lighting.Technology = Enum.Technology.Future
+	-- NOTE: Lighting.Technology is a protected property that game scripts cannot
+	-- write at runtime (it raises "lacking capability RobloxScript"). It is set
+	-- instead in default.project.json so the place ships on Future lighting.
+	-- Everything below is freely writable at runtime.
 	Lighting.Ambient = Color3.fromRGB(120, 125, 130)
 	Lighting.OutdoorAmbient = Color3.fromRGB(140, 150, 160)
 	Lighting.Brightness = 2.5
@@ -358,9 +361,11 @@ function MapBuilder:Build(): Folder
 
 	mapFolder.Parent = Workspace
 
-	-- Terrain is a singleton under Workspace, not parented into our folder.
-	buildWater()
-	tuneLighting()
+	-- Cosmetic, environment-dependent steps run guarded so a failure on any
+	-- given Studio/runtime configuration can never abort map creation (and with
+	-- it the rest of server startup). The island + spawn above always succeed.
+	pcall(buildWater)   -- Terrain is a singleton under Workspace.
+	pcall(tuneLighting)
 
 	return mapFolder
 end
