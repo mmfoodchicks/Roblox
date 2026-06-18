@@ -30,6 +30,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
+local Workspace = game:GetService("Workspace")
 
 local LootManager = require(ReplicatedStorage.Shared.LootManager)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
@@ -44,6 +45,47 @@ local FishingNetwork = ReplicatedStorage:WaitForChild("FishingNetwork") :: Remot
 
 -- Anti-spam: minimum seconds between two RequestCast calls from one player.
 local CAST_COOLDOWN = 0.5
+
+-- You must be near the water's edge (a dock or the shoreline) to cast. We sample
+-- a ring of downward rays around the character and require at least one to hit
+-- Terrain water within reach.
+local WATER_SAMPLE_RADII = { 8, 18, 28 }
+local WATER_RAY_DROP = 45 -- how far down each sample ray reaches
+
+local function isNearWater(player: Player): boolean
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if root == nil then
+		return false
+	end
+
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { character }
+	params.IgnoreWater = false -- we specifically want to detect water
+
+	local origin = root.Position + Vector3.new(0, 6, 0)
+	local drop = Vector3.new(0, -WATER_RAY_DROP, 0)
+
+	-- Straight down, then a ring of samples at increasing radius / 8 directions.
+	if (function()
+		local hit = Workspace:Raycast(origin, drop, params)
+		return hit ~= nil and hit.Material == Enum.Material.Water
+	end)() then
+		return true
+	end
+	for _, radius in ipairs(WATER_SAMPLE_RADII) do
+		for step = 0, 7 do
+			local angle = (step / 8) * math.pi * 2
+			local sample = origin + Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius)
+			local hit = Workspace:Raycast(sample, drop, params)
+			if hit ~= nil and hit.Material == Enum.Material.Water then
+				return true
+			end
+		end
+	end
+	return false
+end
 
 -- The minigame must resolve within a realistic window after the bite.
 local MINIGAME_GRACE = 0.5       -- Slack on the realistic upper bound.
@@ -99,6 +141,12 @@ local function handleRequestCast(player: Player)
 	local data = DataService:GetData(player)
 	if data == nil then
 		reject(player, "Your data is still loading.")
+		return
+	end
+
+	-- 4) Must be at the water's edge (a dock or shoreline) — no fishing on land.
+	if not isNearWater(player) then
+		reject(player, "Move closer to the water to fish!")
 		return
 	end
 

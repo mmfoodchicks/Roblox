@@ -34,13 +34,13 @@ local LocalPlayer = Players.LocalPlayer
 -- Minigame tuning
 -- ---------------------------------------------------------------------------
 
--- Difficulty is randomised per cast: a narrower green zone and/or a faster sweep
--- make a given round harder. Tune the ranges to taste.
-local TARGET_MIN_SCALE = 0.09  -- narrowest (hardest) green zone
-local TARGET_MAX_SCALE = 0.20  -- widest (easiest) green zone
+-- The green zone size is randomised each cast (bigger/smaller), but the sweep
+-- speed is kept fairly steady and on the slower side so it stays readable.
+local TARGET_MIN_SCALE = 0.16  -- smallest green zone (still fair)
+local TARGET_MAX_SCALE = 0.30  -- largest green zone (easy)
 local MARKER_WIDTH_SCALE = 0.035 -- Marker width as a fraction of the track.
-local SWEEP_MIN_SPEED = 1.9     -- slowest sweep (full tracks / second)
-local SWEEP_MAX_SPEED = 2.9     -- fastest sweep
+local SWEEP_MIN_SPEED = 1.3     -- slowest sweep (full tracks / second)
+local SWEEP_MAX_SPEED = 1.8     -- fastest sweep
 local MINIGAME_TIMEOUT = 6      -- Auto-fail (miss) if the player never reacts.
 
 -- ---------------------------------------------------------------------------
