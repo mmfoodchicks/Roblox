@@ -46,7 +46,7 @@ local DOCK_WIDTH = 12
 local DOCK_HEIGHT = 6          -- Deck height above water level.
 
 -- Parkour course tuning.
-local PARKOUR_PLATFORMS = 13   -- Number of jumps (more + tighter = harder).
+local PARKOUR_PLATFORMS = 16   -- Number of jumps (more + tighter = harder).
 local PARKOUR_REWARD = 150     -- Coins for reaching the top (~10 common fish)...
 local PARKOUR_COOLDOWN = 90    -- ...claimable at most once per this many seconds.
 
@@ -331,7 +331,11 @@ local function buildParkour(parent: Instance)
 
 	for i = 1, PARKOUR_PLATFORMS do
 		local isLast = i == PARKOUR_PLATFORMS
-		local size = if isLast then Vector3.new(12, 1, 12) else Vector3.new(5, 1, 5)
+		-- Pads shrink as you climb (5 studs at the bottom down to 3 at the top),
+		-- so landings get more precise the higher you go.
+		local frac = (i - 1) / math.max(1, PARKOUR_PLATFORMS - 1)
+		local dim = math.max(3, 5 - math.floor(frac * 2 + 0.5))
+		local size = if isLast then Vector3.new(10, 1, 10) else Vector3.new(dim, 1, dim)
 		local color = if isLast then COLORS.Reward else PARKOUR_COLORS[((i - 1) % #PARKOUR_COLORS) + 1]
 
 		makePart({
@@ -347,8 +351,8 @@ local function buildParkour(parent: Instance)
 
 		-- Next platform: step outward (-X) and up, zig-zagging in Z so jumps
 		-- alternate direction. Gaps are tuned to be reachable with a default jump.
-		local dz = if i % 2 == 0 then 8 else -8
-		pos += Vector3.new(-8.5, 3.7, dz)
+		local dz = if i % 2 == 0 then 9 else -9
+		pos += Vector3.new(-8.5, 3.9, dz)
 	end
 
 	-- Glowing reward beacon on the summit (walk into it to claim).
