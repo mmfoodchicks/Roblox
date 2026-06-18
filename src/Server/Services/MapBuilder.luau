@@ -74,6 +74,8 @@ local COLORS = {
 	WoodDark = Color3.fromRGB(92, 62, 38),
 	Rock = Color3.fromRGB(120, 124, 128),
 	LedgeRock = Color3.fromRGB(96, 100, 104),
+	Cliff = Color3.fromRGB(112, 106, 96),
+	Path = Color3.fromRGB(156, 130, 96),
 	Trunk = Color3.fromRGB(104, 72, 44),
 	Leaves = Color3.fromRGB(64, 138, 70),
 	Reward = Color3.fromRGB(240, 200, 90),
@@ -350,6 +352,116 @@ local function buildScenery(parent: Instance)
 			Color = COLORS.Rock,
 			Material = Enum.Material.Slate,
 			Parent = scenery,
+		})
+	end
+end
+
+-- A vertical rock cylinder (the cliff body) capped with grass — a "mesa" you can
+-- climb. Returns the world-space top centre so callers can place things on it.
+local function buildMesaBody(parent: Instance, x: number, z: number, radius: number, height: number): Vector3
+	-- Rock body: a Cylinder's round axis is local X, so rotating 90° about Z
+	-- stands it up vertically. Size.X is the height; Size.Y/Z the diameter.
+	makePart({
+		Name = "Cliff",
+		Size = Vector3.new(height, radius * 2, radius * 2),
+		CFrame = CFrame.new(x, height / 2, z) * CFrame.Angles(0, 0, math.rad(90)),
+		Color = COLORS.Cliff,
+		Material = Enum.Material.Rock,
+		Shape = Enum.PartType.Cylinder,
+		Parent = parent,
+	})
+	-- Grass cap on top.
+	makePart({
+		Name = "Top",
+		Size = Vector3.new(3, radius * 2, radius * 2),
+		CFrame = CFrame.new(x, height, z) * CFrame.Angles(0, 0, math.rad(90)),
+		Color = COLORS.Grass,
+		Material = Enum.Material.Grass,
+		Shape = Enum.PartType.Cylinder,
+		Parent = parent,
+	})
+	return Vector3.new(x, height + 1.5, z)
+end
+
+-- A sloped walk-path ramp from a ground point up to a high point.
+local function buildRamp(parent: Instance, fromPos: Vector3, toPos: Vector3, width: number)
+	local length = (toPos - fromPos).Magnitude
+	local mid = (fromPos + toPos) / 2
+	makePart({
+		Name = "Path",
+		Size = Vector3.new(width, 1, length),
+		CFrame = CFrame.lookAt(mid, toPos),
+		Color = COLORS.Path,
+		Material = Enum.Material.Ground,
+		Parent = parent,
+	})
+	-- Low rock kerbs along both edges so the path reads as carved into the cliff.
+	for _, side in ipairs({ -1, 1 }) do
+		local kerb = makePart({
+			Name = "Kerb",
+			Size = Vector3.new(0.6, 1.6, length),
+			CFrame = CFrame.lookAt(mid, toPos) * CFrame.new(side * (width / 2), 0.6, 0),
+			Color = COLORS.Cliff,
+			Material = Enum.Material.Rock,
+			Parent = parent,
+		})
+		kerb.Name = "Kerb"
+	end
+end
+
+-- The mesas (raised "areas") and shoreline cliff outcrops. The flat island stays
+-- the walkable ground; these add the cliffs + ramp walk-paths up to each area.
+local MESAS = {
+	{ x = 72, z = -52, r = 34, h = 24 },
+	{ x = 8, z = -132, r = 42, h = 32 },
+	{ x = -122, z = 78, r = 30, h = 20 },
+	{ x = 120, z = 74, r = 28, h = 18 },
+}
+
+local function buildCliffs(parent: Instance)
+	local model = Instance.new("Model")
+	model.Name = "Cliffs"
+	model.Parent = parent
+
+	for _, m in ipairs(MESAS) do
+		local top = buildMesaBody(model, m.x, m.z, m.r, m.h)
+
+		-- A tree on top so each mesa reads as its own little area to discover.
+		buildTree(model, Vector3.new(m.x, m.h + 1.5, m.z))
+
+		-- Ramp up the side that faces the island centre (toward where players walk
+		-- from spawn). Runs from the ground up onto the grass cap.
+		local center = Vector3.new(m.x, 0, m.z)
+		local toward = if center.Magnitude > 0.1 then -center.Unit else Vector3.new(0, 0, 1)
+		local run = m.h * 1.7
+		local fromPos = center + toward * (m.r + run) + Vector3.new(0, 0.5, 0)
+		local toPos = Vector3.new(top.X, m.h, top.Z) + toward * (m.r - 3)
+		buildRamp(model, fromPos, toPos, 10)
+	end
+
+	-- Shoreline cliff outcrops around the coast (skipping the dock/beach side) so
+	-- there are cliffsides all around the island.
+	local rng = Random.new(778899)
+	for i = 1, 8 do
+		local angle = (i / 8) * math.pi * 2
+		if math.abs(angle - math.pi / 2) < 0.7 then
+			continue -- keep the beach/dock side open
+		end
+		local radius = ISLAND_RADIUS * 0.86
+		local x = math.cos(angle) * radius
+		local z = math.sin(angle) * radius
+		local r = rng:NextNumber(9, 16)
+		local h = rng:NextNumber(14, 30)
+		makePart({
+			Name = "Outcrop",
+			Size = Vector3.new(h, r * 2, r * 2),
+			CFrame = CFrame.new(x, h / 2 - 2, z)
+				* CFrame.Angles(0, 0, math.rad(90))
+				* CFrame.Angles(rng:NextNumber(-0.08, 0.08), 0, rng:NextNumber(-0.08, 0.08)),
+			Color = COLORS.Cliff,
+			Material = Enum.Material.Rock,
+			Shape = Enum.PartType.Cylinder,
+			Parent = model,
 		})
 	end
 end
@@ -666,6 +778,7 @@ function MapBuilder:Build(): Folder
 	buildDock(mapFolder)
 	buildSpawn(mapFolder)
 	buildScenery(mapFolder)
+	buildCliffs(mapFolder)
 	buildParkour(mapFolder)
 	buildHub(mapFolder)
 
