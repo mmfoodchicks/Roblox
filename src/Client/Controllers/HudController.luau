@@ -16,6 +16,7 @@ local Players = game:GetService("Players")
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local MonetizationConfig = require(ReplicatedStorage.Shared.MonetizationConfig)
 local CrateConfig = require(ReplicatedStorage.Shared.CrateConfig)
+local LootManager = require(ReplicatedStorage.Shared.LootManager)
 local UiUtil = require(script.Parent.UiUtil)
 local DataController = require(script.Parent.DataController)
 
@@ -29,6 +30,7 @@ local luckLabel: TextLabel? = nil
 local valueLabel: TextLabel? = nil
 local keysLabel: TextLabel? = nil
 local rarestLabel: TextLabel? = nil
+local oddsLabels: { [string]: TextLabel } = {}
 
 -- ---------------------------------------------------------------------------
 -- Construction
@@ -87,6 +89,53 @@ local function build()
 	rodLabel = statChip(stats, "Rod", 5)
 	rarestLabel = statChip(stats, "Rarest", 6)
 
+	-- Top-right: a permanent live "catch odds" panel.
+	local tiers = LootManager.Tiers
+	local odds = UiUtil.frame({
+		Name = "Odds",
+		Size = UDim2.fromOffset(186, 30 + #tiers * 22),
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -12, 0, 12),
+		Color = UiUtil.Palette.Panel,
+		Transparency = 0.1,
+		Parent = screen,
+	})
+	UiUtil.corner(odds, 8)
+	UiUtil.stroke(odds, UiUtil.Palette.PanelLight, 1)
+	UiUtil.padding(odds, 8)
+
+	UiUtil.label({
+		Size = UDim2.new(1, 0, 0, 20),
+		Text = "Catch Odds",
+		Font = Enum.Font.GothamBold,
+		TextSize = 15,
+		Align = Enum.TextXAlignment.Left,
+		Parent = odds,
+	})
+	oddsLabels = {}
+	for i, tier in ipairs(tiers) do
+		local rarityColor = UiUtil.Rarity[tier] or UiUtil.Palette.Text
+		UiUtil.label({
+			Size = UDim2.new(0.55, 0, 0, 18),
+			Position = UDim2.fromOffset(0, 24 + (i - 1) * 22),
+			Text = tier,
+			TextColor = rarityColor,
+			Align = Enum.TextXAlignment.Left,
+			TextSize = 14,
+			Parent = odds,
+		})
+		oddsLabels[tier] = UiUtil.label({
+			Size = UDim2.new(0.45, 0, 0, 18),
+			Position = UDim2.new(0.55, 0, 0, 24 + (i - 1) * 22),
+			Text = "—",
+			TextColor = rarityColor,
+			Align = Enum.TextXAlignment.Right,
+			Font = Enum.Font.GothamBold,
+			TextSize = 14,
+			Parent = odds,
+		})
+	end
+
 	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 	screen.Parent = playerGui
 end
@@ -107,6 +156,26 @@ local function formatChance(p: number): string
 	else
 		return string.format("%.3f%%", v)
 	end
+end
+
+-- The player's persistent luck multiplier (luck level × rod × passes × pets),
+-- mirroring the server minus the temporary luck potion. Drives the odds panel.
+local function effectiveLuck(data: DataController.PlayerData): number
+	local luck = GameConfig.GetLuckMultiplier(data.LuckLevel)
+	luck *= GameConfig.GetRod(data.ActiveRod).LuckMultiplier
+	for _, pass in pairs(MonetizationConfig.GamePasses) do
+		if pass.LuckMultiplier ~= nil and data.Passes[pass.Key] then
+			luck *= pass.LuckMultiplier
+		end
+	end
+	local petBonus = 0
+	for _, petId in ipairs(data.EquippedPets) do
+		local pet = CrateConfig.GetPet(petId)
+		if pet ~= nil then
+			petBonus += pet.LuckBonus
+		end
+	end
+	return luck * (1 + petBonus)
 end
 
 -- Mirrors BoostService:GetCoinMultiplier for display only (passes + Premium +
@@ -170,6 +239,12 @@ local function refresh(data: DataController.PlayerData)
 			rarestLabel.Text = "🏆 Rarest: —"
 			rarestLabel.TextColor3 = UiUtil.Palette.SubText
 		end
+	end
+
+	-- Live catch odds (top-right), updating as luck/rod/pets change.
+	local odds = LootManager.GetTierOdds(effectiveLuck(data))
+	for tier, lbl in pairs(oddsLabels) do
+		lbl.Text = formatChance(odds[tier] or 0)
 	end
 end
 

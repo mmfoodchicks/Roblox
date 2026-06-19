@@ -26,8 +26,11 @@ local TOP_N = 10
 local WRITE_INTERVAL = 120 -- push online players' scores this often (seconds)
 local REFRESH_INTERVAL = 45 -- re-read + redraw the board this often
 
--- Board position in the cavern (origin-centred, on the north wall, facing +Z).
-local BOARD_POS = Vector3.new(0, 12, -36)
+-- Board position: on the north wall's LEFT segment (clear of the centre tunnel
+-- mouth at x∈[-12,12]), facing +Z into the room.
+local BOARD_POS = Vector3.new(-25, 11, -37)
+local BOARD_W = 22
+local BOARD_H = 15
 
 local store: OrderedDataStore? = nil
 local entriesFrame: Frame? = nil
@@ -51,7 +54,7 @@ local function buildBoard()
 	panel.Name = "TopBoard"
 	panel.Anchored = true
 	panel.CanCollide = false
-	panel.Size = Vector3.new(30, 20, 1)
+	panel.Size = Vector3.new(BOARD_W, BOARD_H, 1)
 	panel.CFrame = CFrame.new(BOARD_POS)
 	panel.Color = Color3.fromRGB(20, 24, 30)
 	panel.Material = Enum.Material.SmoothPlastic
@@ -63,7 +66,7 @@ local function buildBoard()
 	trim.Name = "Trim"
 	trim.Anchored = true
 	trim.CanCollide = false
-	trim.Size = Vector3.new(31.5, 21.5, 0.6)
+	trim.Size = Vector3.new(BOARD_W + 1.5, BOARD_H + 1.5, 0.6)
 	trim.CFrame = CFrame.new(BOARD_POS + Vector3.new(0, 0, -0.5))
 	trim.Color = Color3.fromRGB(240, 200, 90)
 	trim.Material = Enum.Material.Neon

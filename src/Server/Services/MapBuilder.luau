@@ -307,7 +307,8 @@ local function buildSpawn(parent: Instance)
 	spawn.Parent = parent
 end
 
--- A leafy low-poly tree: a trunk topped with a rounded cluster of leaf balls.
+-- A clean low-poly tree: a tapered trunk and a tidy 3-tier conical canopy of
+-- flat-shaded spheres (SmoothPlastic reads cleaner than the speckly Grass).
 local function buildTree(parent: Instance, position: Vector3)
 	local tree = Instance.new("Model")
 	tree.Name = "Tree"
@@ -315,32 +316,28 @@ local function buildTree(parent: Instance, position: Vector3)
 
 	local trunk = makePart({
 		Name = "Trunk",
-		Size = Vector3.new(2.2, 11, 2.2),
-		CFrame = CFrame.new(position + Vector3.new(0, 5.5, 0)),
+		Size = Vector3.new(2, 12, 2),
+		CFrame = CFrame.new(position + Vector3.new(0, 6, 0)) * CFrame.Angles(0, 0, math.rad(90)),
 		Color = COLORS.Trunk,
 		Material = Enum.Material.Wood,
 		Shape = Enum.PartType.Cylinder,
 		Parent = tree,
 	})
-	-- Cylinder's round axis is local X — stand it up so it's a vertical trunk.
-	trunk.CFrame = CFrame.new(position + Vector3.new(0, 5.5, 0)) * CFrame.Angles(0, 0, math.rad(90))
 
-	-- Rounded canopy from several overlapping leaf balls (two greens for depth).
-	local canopyBase = position + Vector3.new(0, 12, 0)
-	local blobs = {
-		{ off = Vector3.new(0, 1.5, 0), s = 11, c = COLORS.Leaves },
-		{ off = Vector3.new(3.5, -0.5, 1), s = 7.5, c = COLORS.LeavesDark },
-		{ off = Vector3.new(-3, 0, -2.5), s = 8, c = COLORS.Leaves },
-		{ off = Vector3.new(1.5, 4, -1.5), s = 7, c = COLORS.LeavesDark },
-		{ off = Vector3.new(-2, 3.5, 2), s = 6.5, c = COLORS.Leaves },
+	-- Three stacked, slightly-flattened spheres of decreasing size form a neat
+	-- rounded conifer shape.
+	local tiers = {
+		{ y = 11.5, d = 13, c = COLORS.LeavesDark },
+		{ y = 15.5, d = 10.5, c = COLORS.Leaves },
+		{ y = 19, d = 7, c = COLORS.Leaves },
 	}
-	for i, b in ipairs(blobs) do
+	for i, t in ipairs(tiers) do
 		makePart({
-			Name = "Leaves" .. i,
-			Size = Vector3.new(b.s, b.s, b.s),
-			CFrame = CFrame.new(canopyBase + b.off),
-			Color = b.c,
-			Material = Enum.Material.Grass,
+			Name = "Canopy" .. i,
+			Size = Vector3.new(t.d, t.d * 0.85, t.d),
+			CFrame = CFrame.new(position + Vector3.new(0, t.y, 0)),
+			Color = t.c,
+			Material = Enum.Material.SmoothPlastic,
 			Shape = Enum.PartType.Ball,
 			Parent = tree,
 		})
@@ -451,7 +448,6 @@ local MERCHANTS = {
 	{ x = 24, z = -18, ui = "Shop", title = "Rod & Luck Smith", action = "Upgrade", color = Color3.fromRGB(64, 156, 255) },
 	{ x = -24, z = 18, ui = "Crates", title = "Crate Trader", action = "Open Crates", color = Color3.fromRGB(220, 110, 110) },
 	{ x = 24, z = 18, ui = "Store", title = "Premium Bazaar", action = "Browse", color = Color3.fromRGB(232, 196, 96) },
-	{ x = 0, z = -30, ui = "Daily", title = "Daily Rewards", action = "Claim", color = Color3.fromRGB(96, 200, 110) },
 }
 
 local function buildMerchantStand(parent: Instance, m: { x: number, z: number, ui: string, title: string, action: string, color: Color3 })

@@ -513,12 +513,8 @@ local function onCatchResult(data: { [string]: any })
 		or Color3.fromRGB(255, 255, 255)
 
 	local prefix = if data.auto == true then "🤖 Auto-caught " else "Caught "
-	local chanceText = ""
-	if type(data.chance) == "number" then
-		chanceText = string.format("\n%s — %s chance", tostring(item.Rarity), formatChance(data.chance))
-	end
 	showToast(
-		string.format("%s%s!  (worth %d 🪙)%s", prefix, tostring(item.Name), tonumber(data.value) or 0, chanceText),
+		string.format("%s%s!  (worth %d 🪙)", prefix, tostring(item.Name), tonumber(data.value) or 0),
 		color
 	)
 
