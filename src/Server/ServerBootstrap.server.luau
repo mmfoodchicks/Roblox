@@ -27,9 +27,10 @@ local PetService = require(Services:WaitForChild("PetService"))
 local CrateService = require(Services:WaitForChild("CrateService"))
 local DailyRewardService = require(Services:WaitForChild("DailyRewardService"))
 
--- Monetization (consults BoostService + CrateService), then leaderboard.
+-- Monetization (consults BoostService + CrateService), then leaderboards.
 local MonetizationService = require(Services:WaitForChild("MonetizationService"))
 local LeaderstatsService = require(Services:WaitForChild("LeaderstatsService"))
+local LeaderboardService = require(Services:WaitForChild("LeaderboardService"))
 
 -- Core gameplay + economy, which depend on the data + boosts layers.
 local FishingService = require(Services:WaitForChild("FishingService"))
@@ -59,6 +60,7 @@ safeInit("DailyRewardService", DailyRewardService)
 
 safeInit("MonetizationService", MonetizationService)
 safeInit("LeaderstatsService", LeaderstatsService)
+safeInit("LeaderboardService", LeaderboardService)
 
 safeInit("FishingService", FishingService)
 safeInit("ShopService", ShopService)

@@ -94,6 +94,9 @@
         "LeaderstatsService": {
           "$path": "src/Server/Services/LeaderstatsService.luau"
         },
+        "LeaderboardService": {
+          "$path": "src/Server/Services/LeaderboardService.luau"
+        },
         "RodToolBuilder": {
           "$path": "src/Server/Services/RodToolBuilder.luau"
         },

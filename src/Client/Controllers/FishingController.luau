@@ -72,6 +72,7 @@ local minigameFrame: Frame? = nil
 local targetZone: Frame? = nil
 local marker: Frame? = nil
 local rewardLabel: TextLabel? = nil
+local bannerLabel: TextLabel? = nil
 
 -- ---------------------------------------------------------------------------
 -- UI construction
@@ -102,6 +103,21 @@ local function buildUi()
 	reward.Text = ""
 	reward.Visible = false
 	reward.Parent = screen
+
+	-- Centered "new rarest catch" banner (hidden until earned).
+	local banner = Instance.new("TextLabel")
+	banner.Name = "RarestBanner"
+	banner.AnchorPoint = Vector2.new(0.5, 0.5)
+	banner.Position = UDim2.fromScale(0.5, 0.34)
+	banner.Size = UDim2.fromScale(0.6, 0.12)
+	banner.BackgroundTransparency = 1
+	banner.Font = Enum.Font.GothamBlack
+	banner.TextScaled = true
+	banner.TextColor3 = Color3.fromRGB(255, 240, 180)
+	banner.TextStrokeTransparency = 0.2
+	banner.Text = ""
+	banner.Visible = false
+	banner.Parent = screen
 
 	-- Minigame container (hidden until a bite).
 	local frame = Instance.new("Frame")
@@ -167,6 +183,7 @@ local function buildUi()
 	targetZone = target
 	marker = mark
 	rewardLabel = reward
+	bannerLabel = banner
 
 	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 	screen.Parent = playerGui
@@ -193,6 +210,35 @@ local function showToast(text: string, color: Color3)
 	)
 	tween:Play()
 	tween.Completed:Once(function()
+		if label.TextTransparency >= 1 then
+			label.Visible = false
+		end
+	end)
+end
+
+-- Big centred "new personal best" banner, with a quick pop + fade.
+local function showBanner(text: string, color: Color3)
+	local label = bannerLabel
+	if label == nil then
+		return
+	end
+	label.Text = text
+	label.TextColor3 = color
+	label.TextTransparency = 0
+	label.Visible = true
+	label.Size = UDim2.fromScale(0.45, 0.09)
+
+	-- Pop bigger, then hold + fade out.
+	TweenService:Create(label, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Size = UDim2.fromScale(0.62, 0.13),
+	}):Play()
+	local fade = TweenService:Create(
+		label,
+		TweenInfo.new(2.6, Enum.EasingStyle.Quad, Enum.EasingDirection.In, 0, false, 1.4),
+		{ TextTransparency = 1 }
+	)
+	fade:Play()
+	fade.Completed:Once(function()
 		if label.TextTransparency >= 1 then
 			label.Visible = false
 		end
@@ -479,6 +525,15 @@ local function onCatchResult(data: { [string]: any })
 	-- Auto-fisher catches are frequent; skip the big particle burst to avoid
 	-- visual spam, but still flash the toast.
 	if data.auto ~= true then
+		playCatchBurst(color)
+	end
+
+	-- New personal-best rarest catch: a celebratory banner + extra particles.
+	if data.newRarest == true and type(data.chance) == "number" then
+		showBanner(
+			string.format("✨ NEW RAREST CATCH! ✨\n%s — %s", tostring(item.Name), formatChance(data.chance)),
+			color
+		)
 		playCatchBurst(color)
 	end
 end

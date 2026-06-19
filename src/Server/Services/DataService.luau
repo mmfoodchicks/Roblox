@@ -269,12 +269,13 @@ end
 --[[
 	RecordCatchChance
 	Records a catch's rarity-tier odds; if it's the rarest (lowest chance) the
-	player has ever landed, it becomes their "rarest catch". No-op otherwise.
+	player has ever landed, it becomes their "rarest catch". Returns true when a
+	new personal best was set.
 ]]
-function DataService:RecordCatchChance(player: Player, chance: number, name: string, rarity: string)
+function DataService:RecordCatchChance(player: Player, chance: number, name: string, rarity: string): boolean
 	local profile = activeProfile(player)
 	if profile == nil or type(chance) ~= "number" or chance <= 0 then
-		return
+		return false
 	end
 	local stats = profile.Data.Stats
 	if stats.RarestChance == 0 or chance < stats.RarestChance then
@@ -282,7 +283,9 @@ function DataService:RecordCatchChance(player: Player, chance: number, name: str
 		stats.RarestName = tostring(name)
 		stats.RarestRarity = tostring(rarity)
 		sync(player, profile.Data)
+		return true
 	end
+	return false
 end
 
 --[[

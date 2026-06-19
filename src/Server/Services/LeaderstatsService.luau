@@ -30,8 +30,34 @@ local function ensureInt(parent: Instance, name: string): IntValue
 	return value
 end
 
--- Ensures a player has a leaderstats folder with our values, returning them.
-local function ensureStats(player: Player): (IntValue, IntValue)
+-- Returns an existing StringValue child or creates one. Always non-nil.
+local function ensureString(parent: Instance, name: string): StringValue
+	local existing = parent:FindFirstChild(name)
+	if existing ~= nil and existing:IsA("StringValue") then
+		return existing
+	end
+	local value = Instance.new("StringValue")
+	value.Name = name
+	value.Parent = parent
+	return value
+end
+
+-- Formats a probability (0..1) as a percentage string.
+local function formatChance(p: number): string
+	local v = p * 100
+	if v >= 10 then
+		return string.format("%.0f%%", v)
+	elseif v >= 1 then
+		return string.format("%.1f%%", v)
+	elseif v >= 0.01 then
+		return string.format("%.2f%%", v)
+	else
+		return string.format("%.3f%%", v)
+	end
+end
+
+-- Ensures a player has a leaderstats folder with our values.
+local function ensureStats(player: Player): (IntValue, IntValue, StringValue)
 	local existingFolder = player:FindFirstChild("leaderstats")
 	local folder: Folder
 	if existingFolder ~= nil and existingFolder:IsA("Folder") then
@@ -42,13 +68,14 @@ local function ensureStats(player: Player): (IntValue, IntValue)
 		folder.Parent = player
 	end
 
-	return ensureInt(folder, "Coins"), ensureInt(folder, "Caught")
+	return ensureInt(folder, "Coins"), ensureInt(folder, "Caught"), ensureString(folder, "Rarest")
 end
 
 local function update(player: Player, data: PlayerData)
-	local coins, caught = ensureStats(player)
+	local coins, caught, rarest = ensureStats(player)
 	coins.Value = data.Coins
 	caught.Value = data.Stats.TotalCaught
+	rarest.Value = if data.Stats.RarestChance > 0 then formatChance(data.Stats.RarestChance) else "—"
 end
 
 function LeaderstatsService:Init()

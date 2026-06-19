@@ -74,7 +74,7 @@ local function autoCatch(player: Player)
 
 	local odds = LootManager.GetTierOdds(luck)
 	local chance = odds[caught.Item.Rarity]
-	DataService:RecordCatchChance(player, chance, caught.Item.Name, caught.Item.Rarity)
+	local newRarest = DataService:RecordCatchChance(player, chance, caught.Item.Name, caught.Item.Rarity)
 	FishingNetwork:FireClient(player, "CatchResult", {
 		success = true,
 		auto = true,
@@ -86,6 +86,7 @@ local function autoCatch(player: Player)
 		},
 		value = caught.Value,
 		chance = chance,
+		newRarest = newRarest,
 	})
 end
 
