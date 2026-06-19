@@ -47,9 +47,9 @@ local FishingNetwork = ReplicatedStorage:WaitForChild("FishingNetwork") :: Remot
 local CAST_COOLDOWN = 0.5
 
 -- You must be near the water's edge (a dock or the shoreline) to cast. We sample
--- a ring of downward rays around the character and require at least one to hit
--- Terrain water within reach.
-local WATER_SAMPLE_RADII = { 8, 18, 28 }
+-- a small ring of downward rays around the character and require at least one to
+-- hit Terrain water — so standing back on the grass/beach won't work.
+local WATER_SAMPLE_RADII = { 7, 13 }
 local WATER_RAY_DROP = 45 -- how far down each sample ray reaches
 
 local function isNearWater(player: Player): boolean

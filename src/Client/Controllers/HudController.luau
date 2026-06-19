@@ -4,25 +4,20 @@
 	-------------
 	Client module (StarterPlayerScripts.Controllers.HudController).
 
-	The always-on heads-up display: coin balance, active rod, luck level and the
-	current unsold inventory value, plus buttons that open the shop and inventory
-	windows. Reads exclusively from the cached DataController snapshot.
+	The always-on heads-up display: coin balance, keys, unsold value, luck level
+	and active rod. Read-only — all shops/crates/selling are now done in person at
+	the merchant stands in the market cavern (see MerchantController), so the HUD
+	carries no action buttons.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
 
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local MonetizationConfig = require(ReplicatedStorage.Shared.MonetizationConfig)
 local CrateConfig = require(ReplicatedStorage.Shared.CrateConfig)
 local UiUtil = require(script.Parent.UiUtil)
 local DataController = require(script.Parent.DataController)
-local ShopController = require(script.Parent.ShopController)
-local InventoryController = require(script.Parent.InventoryController)
-local StoreController = require(script.Parent.StoreController)
-local CrateController = require(script.Parent.CrateController)
-local DailyController = require(script.Parent.DailyController)
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -68,8 +63,7 @@ local function build()
 	screen.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	screen.DisplayOrder = 2
 
-	-- Left-edge vertical stack — clear of the chat (top-left), the hotbar
-	-- (bottom-centre) and the action buttons (bottom-right).
+	-- Left-edge vertical stack — clear of the chat (top-left) and the hotbar.
 	local stats = UiUtil.frame({
 		Name = "Stats",
 		Size = UDim2.fromOffset(170, 220),
@@ -90,85 +84,6 @@ local function build()
 	valueLabel = statChip(stats, "Unsold", 3)
 	luckLabel = statChip(stats, "Luck", 4)
 	rodLabel = statChip(stats, "Rod", 5)
-
-	-- Bottom-right action buttons.
-	local actions = UiUtil.frame({
-		Name = "Actions",
-		Size = UDim2.fromOffset(150, 256),
-		Position = UDim2.new(1, -162, 1, -268),
-		Transparency = 1,
-		Parent = screen,
-	})
-	local actionsLayout = Instance.new("UIListLayout")
-	actionsLayout.Padding = UDim.new(0, 8)
-	actionsLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	actionsLayout.Parent = actions
-
-	local storeBtn = UiUtil.button({
-		Name = "Store",
-		Size = UDim2.fromOffset(150, 44),
-		Text = "💎 Store",
-		Color = UiUtil.Palette.Warn,
-		TextColor = Color3.fromRGB(40, 32, 10),
-		TextSize = 18,
-		Parent = actions,
-	})
-	storeBtn.LayoutOrder = 1
-	storeBtn.Activated:Connect(function()
-		StoreController:Toggle()
-	end)
-
-	local crateBtn = UiUtil.button({
-		Name = "Crates",
-		Size = UDim2.fromOffset(150, 44),
-		Text = "🎁 Crates",
-		Color = UiUtil.Palette.Negative,
-		TextSize = 18,
-		Parent = actions,
-	})
-	crateBtn.LayoutOrder = 2
-	crateBtn.Activated:Connect(function()
-		CrateController:Toggle()
-	end)
-
-	local dailyBtn = UiUtil.button({
-		Name = "Daily",
-		Size = UDim2.fromOffset(150, 44),
-		Text = "📅 Daily",
-		Color = UiUtil.Palette.Positive,
-		TextSize = 18,
-		Parent = actions,
-	})
-	dailyBtn.LayoutOrder = 3
-	dailyBtn.Activated:Connect(function()
-		DailyController:Toggle()
-	end)
-
-	local shopBtn = UiUtil.button({
-		Name = "Shop",
-		Size = UDim2.fromOffset(150, 44),
-		Text = "🎣 Shop",
-		Color = UiUtil.Palette.Accent,
-		TextSize = 18,
-		Parent = actions,
-	})
-	shopBtn.LayoutOrder = 4
-	shopBtn.Activated:Connect(function()
-		ShopController:Toggle()
-	end)
-
-	local invBtn = UiUtil.button({
-		Name = "Inventory",
-		Size = UDim2.fromOffset(150, 44),
-		Text = "🐟 Inventory",
-		Color = UiUtil.Palette.PanelLight,
-		TextSize = 18,
-		Parent = actions,
-	})
-	invBtn.LayoutOrder = 5
-	invBtn.Activated:Connect(function()
-		InventoryController:Toggle()
-	end)
 
 	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 	screen.Parent = playerGui
@@ -241,18 +156,6 @@ function HudController:Init()
 	if existing ~= nil then
 		refresh(existing)
 	end
-
-	-- Keyboard shortcuts on desktop.
-	UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
-		if gameProcessed then
-			return
-		end
-		if input.KeyCode == Enum.KeyCode.E then
-			ShopController:Toggle()
-		elseif input.KeyCode == Enum.KeyCode.Q then
-			InventoryController:Toggle()
-		end
-	end)
 end
 
 return HudController

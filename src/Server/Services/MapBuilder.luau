@@ -57,7 +57,7 @@ local PARKOUR_REWARD = 250     -- Coins for reaching the summit...
 local PARKOUR_COOLDOWN = 90    -- ...claimable at most once per this many seconds.
 local PARKOUR_STEP_UP = 3.4    -- Height gained per ledge.
 local PARKOUR_CHORD = 11       -- Horizontal jump distance between ledges (harder).
-local PARKOUR_LEDGE_OUT = 2.5  -- How far ledges jut from the rock slope.
+local PARKOUR_LEDGE_OUT = 5    -- How far pieces jut from the rock slope (visible).
 
 -- The mountain dominates the island. Sculpted from Terrain rock, it is steep and
 -- smooth (so it can't be free-climbed — see SprintController's MaxSlopeAngle),
@@ -442,6 +442,7 @@ local MERCHANTS = {
 	{ x = 24, z = -18, ui = "Shop", title = "Rod & Luck Smith", action = "Upgrade", color = Color3.fromRGB(64, 156, 255) },
 	{ x = -24, z = 18, ui = "Crates", title = "Crate Trader", action = "Open Crates", color = Color3.fromRGB(220, 110, 110) },
 	{ x = 24, z = 18, ui = "Store", title = "Premium Bazaar", action = "Browse", color = Color3.fromRGB(232, 196, 96) },
+	{ x = 0, z = -30, ui = "Daily", title = "Daily Rewards", action = "Claim", color = Color3.fromRGB(96, 200, 110) },
 }
 
 local function buildMerchantStand(parent: Instance, m: { x: number, z: number, ui: string, title: string, action: string, color: Color3 })
@@ -568,52 +569,97 @@ local function buildUnderMountain(parent: Instance)
 	end
 end
 
--- Builds the parkour as a long spiral of rocky ledges wrapping the mountain all
--- the way to a glowing coin reward on the summit. The reward grants coins
--- (server-authoritative) with a per-player cooldown so it can't be farmed.
+-- Places one creative climbing piece at `pos`, cycling rock jut-outs, fallen
+-- logs and leafy branch platforms so the route reads as a natural climb rather
+-- than identical slabs. `tangentAngle` orients logs along the direction of travel.
+local function buildParkourPiece(parent: Instance, pos: Vector3, tangentAngle: number, index: number, dim: number)
+	local kind = index % 3
+	local tangent = Vector3.new(-math.sin(tangentAngle), 0, math.cos(tangentAngle))
+
+	if kind == 1 then
+		-- Fallen log: a wooden beam you run along (narrow = harder).
+		makePart({
+			Name = "Log" .. index,
+			Size = Vector3.new(2.2, 1.4, dim + 4),
+			CFrame = CFrame.lookAt(pos, pos + tangent) * CFrame.Angles(0, 0, 0),
+			Color = COLORS.Wood,
+			Material = Enum.Material.Wood,
+			Parent = parent,
+		})
+	elseif kind == 2 then
+		-- Leafy branch platform.
+		makePart({
+			Name = "Branch" .. index,
+			Size = Vector3.new(dim + 0.5, 1, dim + 0.5),
+			CFrame = CFrame.new(pos),
+			Color = COLORS.Leaves,
+			Material = Enum.Material.Grass,
+			Parent = parent,
+		})
+	else
+		-- Rock jut-out, slightly tilted for a rugged look.
+		makePart({
+			Name = "Rock" .. index,
+			Size = Vector3.new(dim, 1.2, dim + 1),
+			CFrame = CFrame.new(pos) * CFrame.Angles(math.rad(4), tangentAngle, 0),
+			Color = COLORS.LedgeRock,
+			Material = Enum.Material.Slate,
+			Parent = parent,
+		})
+	end
+end
+
+-- Builds the parkour: a short entrance climb up the SW face (away from the tunnel
+-- mouths), then a long spiral of mixed rock/log/branch pieces wrapping the
+-- mountain to a summit reward. Everything starts ABOVE the cavern ceiling so no
+-- piece ever floats inside the carved tunnel. It's meant to be discovered.
 --
--- The spiral keeps each jump reachable: at a given height the cone has radius r,
--- so to step ~PARKOUR_CHORD studs around the circle we advance the angle by
--- 2*asin(chord / 2r). As the cone narrows toward the top, that angle grows, so
--- the path naturally winds tighter near the summit.
+-- The spiral keeps each jump reachable: at height h the cone has radius r, so to
+-- step ~PARKOUR_CHORD studs around the circle we advance the angle by
+-- 2*asin(chord / 2r); as the cone narrows the path winds tighter near the top.
 local function buildParkour(parent: Instance)
 	local model = Instance.new("Model")
 	model.Name = "Parkour"
 	model.Parent = parent
 
-	local startH = 4
+	local entryAngle = math.rad(215) -- SW face, clear of the N/S/E/W tunnel mouths
+	local groundStart = CAVERN_HEIGHT + 4 -- start above the tunnel ceiling
 	local topH = MOUNTAIN_HEIGHT - 8
-	local h = startH
-	local angle = 0
 	local index = 0
 
-	-- No signpost: the climb is meant to be discovered, not advertised.
-	while h <= topH and index < 240 do
+	-- Entrance: a near-vertical ladder of pieces from just above the cavern up to
+	-- the spiral start, at a fixed (solid-rock) angle so players can climb on.
+	do
+		local h = 4
+		while h < groundStart do
+			index += 1
+			local r = coneRadius(h) + PARKOUR_LEDGE_OUT
+			local pos = Vector3.new(MOUNTAIN_X + math.cos(entryAngle) * r, h, MOUNTAIN_Z + math.sin(entryAngle) * r)
+			buildParkourPiece(model, pos, entryAngle, index, 4)
+			h += PARKOUR_STEP_UP
+		end
+	end
+
+	-- Spiral around the mountain to the top.
+	local h = groundStart
+	local angle = entryAngle
+	while h <= topH and index < 300 do
 		index += 1
 		local r = coneRadius(h) + PARKOUR_LEDGE_OUT
 		local pos = Vector3.new(MOUNTAIN_X + math.cos(angle) * r, h, MOUNTAIN_Z + math.sin(angle) * r)
 
-		-- Smaller pads (harder, tighter landings), shrinking further with height.
-		local frac = (h - startH) / (topH - startH)
+		-- Pieces shrink with height for tighter landings near the top (harder).
+		local frac = (h - groundStart) / (topH - groundStart)
 		local dim = math.max(2.5, 4 - math.floor(frac * 2 + 0.5))
 
-		makePart({
-			Name = "Ledge" .. index,
-			Size = Vector3.new(dim, 1, dim + 1),
-			CFrame = CFrame.new(pos),
-			Color = COLORS.LedgeRock,
-			Material = Enum.Material.Slate,
-			Parent = model,
-		})
+		buildParkourPiece(model, pos, angle, index, dim)
 
-		-- Advance: around the circle by a reachable chord, and up one step.
 		local ratio = math.clamp(PARKOUR_CHORD / (2 * r), 0, 1)
 		angle += 2 * math.asin(ratio)
 		h += PARKOUR_STEP_UP
 	end
 
-	-- Summit: continue the spiral one more (reachable) step into a big landing
-	-- pad that caps the climb, with the reward beacon above it.
+	-- Summit: a big landing pad capping the climb, with the reward beacon above.
 	local sr = coneRadius(topH) + PARKOUR_LEDGE_OUT
 	local summitPos = Vector3.new(MOUNTAIN_X + math.cos(angle) * sr, topH + 3, MOUNTAIN_Z + math.sin(angle) * sr)
 	makePart({
