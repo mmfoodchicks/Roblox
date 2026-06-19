@@ -26,11 +26,12 @@ local TOP_N = 10
 local WRITE_INTERVAL = 120 -- push online players' scores this often (seconds)
 local REFRESH_INTERVAL = 45 -- re-read + redraw the board this often
 
--- Board position: on the north wall's LEFT segment (clear of the centre tunnel
--- mouth at x∈[-12,12]), facing +Z into the room.
-local BOARD_POS = Vector3.new(-25, 11, -37)
-local BOARD_W = 22
-local BOARD_H = 15
+-- Board sits in the NW of the cavern, pulled ~5 studs off every wall (terrain
+-- carving snaps to a 4-stud grid, so flush placement gets buried in rock) and
+-- clear of the centre tunnel mouth at x∈[-12,12]. Faces +Z into the room.
+local BOARD_POS = Vector3.new(-24, 11, -33)
+local BOARD_W = 18
+local BOARD_H = 14
 
 local store: OrderedDataStore? = nil
 local entriesFrame: Frame? = nil

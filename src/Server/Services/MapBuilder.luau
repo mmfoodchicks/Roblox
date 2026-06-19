@@ -314,9 +314,12 @@ local function buildTree(parent: Instance, position: Vector3)
 	tree.Name = "Tree"
 	tree.Parent = parent
 
+	-- Cylinder's round axis is local X, so Size.X is the trunk LENGTH (height) and
+	-- Size.Y/Z are the diameter; rotating 90° about Z stands it upright with its
+	-- base at ground level (centre at y = height/2).
 	local trunk = makePart({
 		Name = "Trunk",
-		Size = Vector3.new(2, 12, 2),
+		Size = Vector3.new(12, 2, 2),
 		CFrame = CFrame.new(position + Vector3.new(0, 6, 0)) * CFrame.Angles(0, 0, math.rad(90)),
 		Color = COLORS.Trunk,
 		Material = Enum.Material.Wood,
