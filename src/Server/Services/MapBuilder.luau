@@ -74,7 +74,8 @@ local COLORS = {
 	Cliff = Color3.fromRGB(112, 106, 96),
 	Path = Color3.fromRGB(156, 130, 96),
 	Trunk = Color3.fromRGB(104, 72, 44),
-	Leaves = Color3.fromRGB(64, 138, 70),
+	Leaves = Color3.fromRGB(76, 156, 80),
+	LeavesDark = Color3.fromRGB(58, 128, 64),
 	Reward = Color3.fromRGB(240, 200, 90),
 }
 
@@ -176,6 +177,13 @@ local function buildWater()
 	local fillCenter = CFrame.new(0, fillTop - WATER_DEPTH / 2, 0)
 	local fillSize = Vector3.new(WATER_RADIUS * 2, WATER_DEPTH, WATER_RADIUS * 2)
 	terrain:FillBlock(fillCenter, fillSize, Enum.Material.Water)
+
+	-- Tropical-looking water.
+	terrain.WaterColor = Color3.fromRGB(28, 124, 160)
+	terrain.WaterReflectance = 0.32
+	terrain.WaterTransparency = 0.32
+	terrain.WaterWaveSize = 0.12
+	terrain.WaterWaveSpeed = 10
 end
 
 -- Sculpts the mountain from Terrain rock by stacking balls of decreasing radius
@@ -299,7 +307,7 @@ local function buildSpawn(parent: Instance)
 	spawn.Parent = parent
 end
 
--- A simple low-poly tree: trunk + two stacked leaf blocks.
+-- A leafy low-poly tree: a trunk topped with a rounded cluster of leaf balls.
 local function buildTree(parent: Instance, position: Vector3)
 	local tree = Instance.new("Model")
 	tree.Name = "Tree"
@@ -307,29 +315,36 @@ local function buildTree(parent: Instance, position: Vector3)
 
 	local trunk = makePart({
 		Name = "Trunk",
-		Size = Vector3.new(2, 10, 2),
-		CFrame = CFrame.new(position + Vector3.new(0, 5, 0)),
+		Size = Vector3.new(2.2, 11, 2.2),
+		CFrame = CFrame.new(position + Vector3.new(0, 5.5, 0)),
 		Color = COLORS.Trunk,
 		Material = Enum.Material.Wood,
+		Shape = Enum.PartType.Cylinder,
 		Parent = tree,
 	})
+	-- Cylinder's round axis is local X — stand it up so it's a vertical trunk.
+	trunk.CFrame = CFrame.new(position + Vector3.new(0, 5.5, 0)) * CFrame.Angles(0, 0, math.rad(90))
 
-	makePart({
-		Name = "Leaves",
-		Size = Vector3.new(10, 8, 10),
-		CFrame = CFrame.new(position + Vector3.new(0, 12, 0)),
-		Color = COLORS.Leaves,
-		Material = Enum.Material.Grass,
-		Parent = tree,
-	})
-	makePart({
-		Name = "LeavesTop",
-		Size = Vector3.new(7, 6, 7),
-		CFrame = CFrame.new(position + Vector3.new(0, 17, 0)),
-		Color = COLORS.Leaves,
-		Material = Enum.Material.Grass,
-		Parent = tree,
-	})
+	-- Rounded canopy from several overlapping leaf balls (two greens for depth).
+	local canopyBase = position + Vector3.new(0, 12, 0)
+	local blobs = {
+		{ off = Vector3.new(0, 1.5, 0), s = 11, c = COLORS.Leaves },
+		{ off = Vector3.new(3.5, -0.5, 1), s = 7.5, c = COLORS.LeavesDark },
+		{ off = Vector3.new(-3, 0, -2.5), s = 8, c = COLORS.Leaves },
+		{ off = Vector3.new(1.5, 4, -1.5), s = 7, c = COLORS.LeavesDark },
+		{ off = Vector3.new(-2, 3.5, 2), s = 6.5, c = COLORS.Leaves },
+	}
+	for i, b in ipairs(blobs) do
+		makePart({
+			Name = "Leaves" .. i,
+			Size = Vector3.new(b.s, b.s, b.s),
+			CFrame = CFrame.new(canopyBase + b.off),
+			Color = b.c,
+			Material = Enum.Material.Grass,
+			Shape = Enum.PartType.Ball,
+			Parent = tree,
+		})
+	end
 
 	tree.PrimaryPart = trunk
 end
@@ -867,15 +882,49 @@ local function tuneLighting()
 	atmosphere.Haze = 1.6
 	atmosphere.Parent = Lighting
 
-	-- A clear-ish sky.
+	-- A clear-ish sky with a slightly larger sun.
 	local existingSky = Lighting:FindFirstChildOfClass("Sky")
 	if existingSky == nil then
 		local sky = Instance.new("Sky")
 		sky.Name = "FishingSky"
-		sky.SunAngularSize = 11
+		sky.SunAngularSize = 13
 		sky.MoonAngularSize = 11
 		sky.Parent = Lighting
 	end
+
+	-- Volumetric clouds for a fuller sky.
+	local clouds = Workspace.Terrain:FindFirstChildOfClass("Clouds") or Instance.new("Clouds")
+	clouds.Cover = 0.55
+	clouds.Density = 0.45
+	clouds.Color = Color3.fromRGB(255, 255, 255)
+	clouds.Parent = Workspace.Terrain
+
+	-- Post-processing for a brighter, more polished look.
+	local function ensureEffect(className: string, name: string): Instance
+		local existing = Lighting:FindFirstChild(name)
+		if existing ~= nil then
+			return existing
+		end
+		local effect = Instance.new(className)
+		effect.Name = name
+		effect.Parent = Lighting
+		return effect
+	end
+
+	local bloom = ensureEffect("BloomEffect", "Bloom") :: BloomEffect
+	bloom.Intensity = 0.55
+	bloom.Size = 24
+	bloom.Threshold = 0.92
+
+	local grade = ensureEffect("ColorCorrectionEffect", "ColorGrade") :: ColorCorrectionEffect
+	grade.Brightness = 0.02
+	grade.Contrast = 0.08
+	grade.Saturation = 0.14
+	grade.TintColor = Color3.fromRGB(255, 250, 242)
+
+	local rays = ensureEffect("SunRaysEffect", "SunRays") :: SunRaysEffect
+	rays.Intensity = 0.12
+	rays.Spread = 0.85
 end
 
 -- ---------------------------------------------------------------------------

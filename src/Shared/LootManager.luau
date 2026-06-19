@@ -16,7 +16,17 @@ local LootManager = {}
 
 -- Stable identifiers for each rarity tier. Kept as string constants so they
 -- serialise cleanly across the RemoteEvent and into the player's inventory.
-export type Rarity = "Common" | "Uncommon" | "Rare" | "Legendary"
+export type Rarity = "Common" | "Uncommon" | "Rare" | "Epic" | "Legendary" | "Mythic"
+
+-- One shared colour per rarity tier (matches the client UiUtil.Rarity palette).
+local RARITY_COLOR: { [string]: Color3 } = {
+	Common = Color3.fromRGB(170, 178, 184),
+	Uncommon = Color3.fromRGB(88, 196, 120),
+	Rare = Color3.fromRGB(64, 156, 255),
+	Epic = Color3.fromRGB(170, 96, 255),
+	Legendary = Color3.fromRGB(240, 180, 70),
+	Mythic = Color3.fromRGB(255, 90, 140),
+}
 
 -- The canonical data structure for a single catchable item.
 export type LootItem = {
@@ -39,45 +49,49 @@ export type CaughtLoot = {
 
 	Weights are RELATIVE, not percentages — the selector normalises them at
 	runtime, so new entries can be appended without re-balancing the others.
-
-		Common Fish              Weight = 70    BaseValue = 15
-		Uncommon Salmon          Weight = 20    BaseValue = 40
-		Rare Golden Trout        Weight = 8.5   BaseValue = 120
-		Legendary Kraken Tentacle Weight = 1.5  BaseValue = 750
+	Multiple species share each rarity tier; the per-tier weights roughly sum to
+	the old single-fish weights, so overall odds are unchanged while the variety
+	is much richer. Each fish takes its tier's colour.
 ]]
+local function fish(id: string, name: string, rarity: Rarity, weight: number, value: number): LootItem
+	return {
+		Id = id,
+		Name = name,
+		Rarity = rarity,
+		Weight = weight,
+		BaseValue = value,
+		Color = RARITY_COLOR[rarity],
+	}
+end
+
 LootManager.Catalogue = {
-	{
-		Id = "common_fish",
-		Name = "Common Fish",
-		Rarity = "Common" :: Rarity,
-		Weight = 70,
-		BaseValue = 15,
-		Color = Color3.fromRGB(170, 178, 184),
-	},
-	{
-		Id = "uncommon_salmon",
-		Name = "Uncommon Salmon",
-		Rarity = "Uncommon" :: Rarity,
-		Weight = 20,
-		BaseValue = 40,
-		Color = Color3.fromRGB(88, 196, 120),
-	},
-	{
-		Id = "rare_golden_trout",
-		Name = "Rare Golden Trout",
-		Rarity = "Rare" :: Rarity,
-		Weight = 8.5,
-		BaseValue = 120,
-		Color = Color3.fromRGB(64, 156, 255),
-	},
-	{
-		Id = "legendary_kraken_tentacle",
-		Name = "Legendary Kraken Tentacle",
-		Rarity = "Legendary" :: Rarity,
-		Weight = 1.5,
-		BaseValue = 750,
-		Color = Color3.fromRGB(190, 96, 255),
-	},
+	-- Common (~70)
+	fish("anchovy", "Anchovy", "Common", 18, 10),
+	fish("sardine", "Sardine", "Common", 16, 12),
+	fish("carp", "Carp", "Common", 14, 16),
+	fish("bluegill", "Bluegill", "Common", 12, 14),
+	fish("perch", "Perch", "Common", 10, 20),
+	-- Uncommon (~20)
+	fish("salmon", "Salmon", "Uncommon", 7, 40),
+	fish("rainbow_trout", "Rainbow Trout", "Uncommon", 5, 48),
+	fish("bass", "Largemouth Bass", "Uncommon", 5, 42),
+	fish("catfish", "Catfish", "Uncommon", 3, 55),
+	-- Rare (~8.5)
+	fish("golden_trout", "Golden Trout", "Rare", 3, 120),
+	fish("swordfish", "Swordfish", "Rare", 2.5, 150),
+	fish("pufferfish", "Pufferfish", "Rare", 2, 110),
+	fish("mahi_mahi", "Mahi-Mahi", "Rare", 1, 185),
+	-- Epic (~3)
+	fish("anglerfish", "Anglerfish", "Epic", 1.5, 300),
+	fish("electric_eel", "Electric Eel", "Epic", 1, 360),
+	fish("giant_squid", "Giant Squid", "Epic", 0.6, 480),
+	-- Legendary (~1.5)
+	fish("kraken_tentacle", "Kraken Tentacle", "Legendary", 0.7, 750),
+	fish("megalodon_tooth", "Megalodon Tooth", "Legendary", 0.45, 1050),
+	fish("leviathan_scale", "Leviathan Scale", "Legendary", 0.3, 1300),
+	-- Mythic (~0.2) — the jackpot tier
+	fish("ancient_coelacanth", "Ancient Coelacanth", "Mythic", 0.16, 3000),
+	fish("golden_dragonfish", "Golden Dragon Fish", "Mythic", 0.05, 6000),
 } :: { LootItem }
 
 -- Fast Id -> LootItem lookup, built once at require time.
