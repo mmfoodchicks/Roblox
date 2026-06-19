@@ -588,43 +588,119 @@ local function buildUnderMountain(parent: Instance)
 	end
 end
 
--- Places one creative climbing piece at `pos`, cycling rock jut-outs, fallen
--- logs and leafy branch platforms so the route reads as a natural climb rather
--- than identical slabs. `tangentAngle` orients logs along the direction of travel.
-local function buildParkourPiece(parent: Instance, pos: Vector3, tangentAngle: number, index: number, dim: number)
-	local kind = index % 3
-	local tangent = Vector3.new(-math.sin(tangentAngle), 0, math.cos(tangentAngle))
+-- Places one natural climbing feature at `pos`. `angle` is the radial angle of
+-- the spot on the mountain, so we can build decoration INWARD (into the cliff)
+-- and keep a clear standable top facing OUTWARD. Cycles four kinds — rock
+-- outcrops, cliff trees, leafy branches and gnarled roots — so the route reads
+-- as real outcroppings rather than identical slabs.
+local function buildParkourPiece(parent: Instance, pos: Vector3, angle: number, index: number, dim: number)
+	local outward = Vector3.new(math.cos(angle), 0, math.sin(angle))
+	local inward = -outward
+	local tangent = Vector3.new(-math.sin(angle), 0, math.cos(angle))
+	local up = Vector3.new(0, 1, 0)
+	local kind = index % 4
 
-	if kind == 1 then
-		-- Fallen log: a thick wooden beam you run along.
+	-- Small helpers (decorative foliage / boulders don't collide; you pass through).
+	local function leaf(p: Vector3, s: number)
 		makePart({
-			Name = "Log" .. index,
-			Size = Vector3.new(3, 2, dim + 6),
-			CFrame = CFrame.lookAt(pos, pos + tangent),
-			Color = COLORS.Wood,
-			Material = Enum.Material.Wood,
-			Parent = parent,
-		})
-	elseif kind == 2 then
-		-- Leafy branch platform.
-		makePart({
-			Name = "Branch" .. index,
-			Size = Vector3.new(dim + 2, 1.4, dim + 2),
-			CFrame = CFrame.new(pos),
+			Name = "Leaf" .. index,
+			Size = Vector3.new(s, s * 0.8, s),
+			CFrame = CFrame.new(p),
 			Color = COLORS.Leaves,
 			Material = Enum.Material.Grass,
+			Shape = Enum.PartType.Ball,
+			CanCollide = false,
 			Parent = parent,
 		})
-	else
-		-- Rock jut-out, slightly tilted for a rugged look.
+	end
+	local function boulder(p: Vector3, s: number)
 		makePart({
-			Name = "Rock" .. index,
-			Size = Vector3.new(dim + 1, 1.6, dim + 2),
-			CFrame = CFrame.new(pos) * CFrame.Angles(math.rad(4), tangentAngle, 0),
+			Name = "Boulder" .. index,
+			Size = Vector3.new(s, s, s),
+			CFrame = CFrame.new(p),
+			Color = COLORS.Rock,
+			Material = Enum.Material.Rock,
+			Shape = Enum.PartType.Ball,
+			CanCollide = false,
+			Parent = parent,
+		})
+	end
+
+	if kind == 0 then
+		-- ROCK OUTCROP: a flat shelf with a boulder anchoring it into the cliff.
+		makePart({
+			Name = "Outcrop" .. index,
+			Size = Vector3.new(dim + 2, 1.6, dim + 2),
+			CFrame = CFrame.new(pos) * CFrame.Angles(math.rad(4), angle, 0),
 			Color = COLORS.LedgeRock,
 			Material = Enum.Material.Slate,
 			Parent = parent,
 		})
+		boulder(pos + inward * (dim * 0.4) - up * 1.5, dim + 3)
+		boulder(pos + tangent * (dim * 0.45) + up * 0.6, 2.4)
+	elseif kind == 1 then
+		-- CLIFF TREE: a dirt shelf with a trunk + canopy growing toward the cliff,
+		-- leaving the outward half open to land on.
+		makePart({
+			Name = "TreeShelf" .. index,
+			Size = Vector3.new(dim + 2, 1.5, dim + 2),
+			CFrame = CFrame.new(pos),
+			Color = COLORS.Path,
+			Material = Enum.Material.Ground,
+			Parent = parent,
+		})
+		local trunkBase = pos + inward * 1.5
+		makePart({
+			Name = "Trunk" .. index,
+			Size = Vector3.new(2, 9, 2),
+			CFrame = CFrame.new(trunkBase + up * 4.5),
+			Color = COLORS.Trunk,
+			Material = Enum.Material.Wood,
+			CanCollide = false,
+			Parent = parent,
+		})
+		leaf(trunkBase + up * 9, dim + 5)
+		leaf(trunkBase + up * 7 + tangent * 2.5, dim + 2)
+		leaf(trunkBase + up * 7 - tangent * 2.5, dim + 2)
+	elseif kind == 2 then
+		-- LEAFY BRANCH: a thick branch reaching out of the cliff with foliage, the
+		-- outer end flat enough to stand on.
+		local cliffPoint = pos + inward * (dim + 6)
+		local center = (cliffPoint + pos) / 2
+		makePart({
+			Name = "Branch" .. index,
+			Size = Vector3.new(2.6, 2, (pos - cliffPoint).Magnitude),
+			CFrame = CFrame.lookAt(center, pos),
+			Color = COLORS.Trunk,
+			Material = Enum.Material.Wood,
+			Parent = parent,
+		})
+		leaf(pos + outward * 1 + up * 1.6, dim + 2)
+		leaf(pos + tangent * 2.5 + up * 1, dim)
+		leaf(pos - tangent * 2.5 + up * 1, dim)
+	else
+		-- GNARLED ROOTS: a flat cap held up by root tendrils weaving out of the rock.
+		makePart({
+			Name = "RootCap" .. index,
+			Size = Vector3.new(dim + 2, 1.4, dim + 2),
+			CFrame = CFrame.new(pos),
+			Color = COLORS.Trunk,
+			Material = Enum.Material.Wood,
+			Parent = parent,
+		})
+		for i = -1, 1 do
+			local rootFrom = pos + inward * (dim + 5) + tangent * (i * 2.2) - up * 2.5
+			local rootTo = pos + tangent * (i * 1.0) - up * 0.5
+			makePart({
+				Name = "Root" .. index .. "_" .. i,
+				Size = Vector3.new(1.4, 1.4, (rootTo - rootFrom).Magnitude),
+				CFrame = CFrame.lookAt((rootFrom + rootTo) / 2, rootTo),
+				Color = COLORS.WoodDark,
+				Material = Enum.Material.Wood,
+				CanCollide = false,
+				Parent = parent,
+			})
+		end
 	end
 end
 
