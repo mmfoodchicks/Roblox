@@ -129,6 +129,39 @@ end
 
 	Returns the selected LootItem. Never returns nil for a non-empty catalogue.
 ]]
+-- The single weighting rule, shared by the roll and the odds display so they can
+-- never drift apart. Rarer items (lower base weight) benefit more from luck.
+local function modifiedWeight(item: LootItem, effectiveLuck: number): number
+	local rarityBias = math.max(1, (100 / math.max(item.Weight, 0.0001)) ^ 0.12)
+	return item.Weight * (1 + (effectiveLuck - 1) * (rarityBias - 1) * 0.25)
+end
+
+-- Rarity tiers in display order.
+LootManager.Tiers = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic" }
+
+--[[
+	GetTierOdds
+	Returns the probability (0..1) of catching each rarity tier at the given luck
+	multiplier, using the exact same weighting as the roll. Lets the UI show live
+	odds that improve with luck/rod upgrades.
+]]
+function LootManager.GetTierOdds(luck: number?): { [string]: number }
+	local effectiveLuck = math.max(luck or 1, 1)
+	local total = 0
+	local perTier: { [string]: number } = {}
+	for _, item in ipairs(LootManager.Catalogue) do
+		local w = modifiedWeight(item, effectiveLuck)
+		total += w
+		perTier[item.Rarity] = (perTier[item.Rarity] or 0) + w
+	end
+	if total > 0 then
+		for tier, w in pairs(perTier) do
+			perTier[tier] = w / total
+		end
+	end
+	return perTier
+end
+
 function LootManager.SelectLoot(luck: number?): LootItem
 	local catalogue = LootManager.Catalogue
 	assert(#catalogue > 0, "LootManager.SelectLoot: catalogue is empty")
@@ -143,12 +176,7 @@ function LootManager.SelectLoot(luck: number?): LootItem
 	local cumulative: { number } = table.create(#catalogue, 0)
 
 	for index, item in ipairs(catalogue) do
-		-- Rarer items (lower base weight) benefit more from luck. The exponent
-		-- is small so the effect is meaningful but not degenerate.
-		local rarityBias = math.max(1, (100 / math.max(item.Weight, 0.0001)) ^ 0.12)
-		local modifiedWeight = item.Weight * (1 + (effectiveLuck - 1) * (rarityBias - 1) * 0.25)
-
-		totalWeight += modifiedWeight
+		totalWeight += modifiedWeight(item, effectiveLuck)
 		cumulative[index] = totalWeight
 	end
 

@@ -440,6 +440,21 @@ local rarityColors: { [string]: Color3 } = {
 	Mythic = Color3.fromRGB(255, 90, 140),
 }
 
+-- Formats a probability (0..1) as a readable percentage: "65%", "8.5%",
+-- "0.07%", "0.003%".
+local function formatChance(p: number): string
+	local v = p * 100
+	if v >= 10 then
+		return string.format("%.0f%%", v)
+	elseif v >= 1 then
+		return string.format("%.1f%%", v)
+	elseif v >= 0.01 then
+		return string.format("%.2f%%", v)
+	else
+		return string.format("%.3f%%", v)
+	end
+end
+
 local function onCatchResult(data: { [string]: any })
 	if data.success ~= true then
 		showToast("The fish got away!", Color3.fromRGB(220, 110, 110))
@@ -452,7 +467,14 @@ local function onCatchResult(data: { [string]: any })
 		or Color3.fromRGB(255, 255, 255)
 
 	local prefix = if data.auto == true then "🤖 Auto-caught " else "Caught "
-	showToast(string.format("%s%s!  (worth %d 🪙)", prefix, tostring(item.Name), tonumber(data.value) or 0), color)
+	local chanceText = ""
+	if type(data.chance) == "number" then
+		chanceText = string.format("\n%s — %s chance", tostring(item.Rarity), formatChance(data.chance))
+	end
+	showToast(
+		string.format("%s%s!  (worth %d 🪙)%s", prefix, tostring(item.Name), tonumber(data.value) or 0, chanceText),
+		color
+	)
 
 	-- Auto-fisher catches are frequent; skip the big particle burst to avoid
 	-- visual spam, but still flash the toast.

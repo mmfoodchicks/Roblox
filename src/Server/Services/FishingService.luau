@@ -252,7 +252,10 @@ local function handleResolveMinigame(player: Player, payload: unknown)
 		return
 	end
 
-	-- Fire the catch details for UI + particle feedback.
+	-- Fire the catch details for UI + particle feedback. Include the live odds of
+	-- this catch's rarity tier (at the exact luck used for the roll) so the client
+	-- can show "... — 0.07% chance".
+	local odds = LootManager.GetTierOdds(luck)
 	FishingNetwork:FireClient(player, "CatchResult", {
 		success = true,
 		item = {
@@ -262,6 +265,7 @@ local function handleResolveMinigame(player: Player, payload: unknown)
 			Color = caught.Item.Color,
 		},
 		value = caught.Value,
+		chance = odds[caught.Item.Rarity],
 	})
 end
 

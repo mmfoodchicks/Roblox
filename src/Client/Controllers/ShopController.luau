@@ -16,6 +16,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local MonetizationConfig = require(ReplicatedStorage.Shared.MonetizationConfig)
+local CrateConfig = require(ReplicatedStorage.Shared.CrateConfig)
+local LootManager = require(ReplicatedStorage.Shared.LootManager)
 local UiUtil = require(script.Parent.UiUtil)
 local DataController = require(script.Parent.DataController)
 
@@ -195,6 +198,98 @@ local function buildLuckRow(parent: Instance, order: number)
 end
 
 -- ---------------------------------------------------------------------------
+-- Live catch odds
+-- ---------------------------------------------------------------------------
+
+-- The player's persistent luck multiplier (luck level × rod × passes × pets),
+-- mirroring BoostService/FishingService minus the temporary luck potion. Used
+-- only to display the live odds.
+local function effectiveLuck(data: DataController.PlayerData): number
+	local luck = GameConfig.GetLuckMultiplier(data.LuckLevel)
+	luck *= GameConfig.GetRod(data.ActiveRod).LuckMultiplier
+	for _, pass in pairs(MonetizationConfig.GamePasses) do
+		if pass.LuckMultiplier ~= nil and data.Passes[pass.Key] then
+			luck *= pass.LuckMultiplier
+		end
+	end
+	local petBonus = 0
+	for _, petId in ipairs(data.EquippedPets) do
+		local pet = CrateConfig.GetPet(petId)
+		if pet ~= nil then
+			petBonus += pet.LuckBonus
+		end
+	end
+	return luck * (1 + petBonus)
+end
+
+local function formatChance(p: number): string
+	local v = p * 100
+	if v >= 10 then
+		return string.format("%.0f%%", v)
+	elseif v >= 1 then
+		return string.format("%.1f%%", v)
+	elseif v >= 0.01 then
+		return string.format("%.2f%%", v)
+	else
+		return string.format("%.3f%%", v)
+	end
+end
+
+-- A panel listing the live catch chance per rarity tier; refreshes with luck/rod.
+local function buildOddsPanel(parent: Instance, order: number)
+	local rows = #LootManager.Tiers
+	local panel = UiUtil.frame({
+		Name = "Odds",
+		Size = UDim2.new(1, 0, 0, 26 + rows * 18),
+		Color = UiUtil.Palette.PanelLight,
+		Parent = parent,
+	})
+	panel.LayoutOrder = order
+	UiUtil.corner(panel, 8)
+	UiUtil.padding(panel, 8)
+
+	UiUtil.label({
+		Size = UDim2.new(1, 0, 0, 20),
+		Text = "Your catch odds",
+		Font = Enum.Font.GothamBold,
+		TextSize = 15,
+		Align = Enum.TextXAlignment.Left,
+		Parent = panel,
+	})
+
+	local valueLabels: { [string]: TextLabel } = {}
+	for i, tier in ipairs(LootManager.Tiers) do
+		local rarityColor = UiUtil.Rarity[tier] or UiUtil.Palette.Text
+		UiUtil.label({
+			Size = UDim2.new(0.5, 0, 0, 16),
+			Position = UDim2.fromOffset(0, 24 + (i - 1) * 18),
+			Text = tier,
+			TextColor = rarityColor,
+			Align = Enum.TextXAlignment.Left,
+			TextSize = 13,
+			Parent = panel,
+		})
+		valueLabels[tier] = UiUtil.label({
+			Size = UDim2.new(0.5, 0, 0, 16),
+			Position = UDim2.new(0.5, 0, 0, 24 + (i - 1) * 18),
+			Text = "—",
+			TextColor = rarityColor,
+			Align = Enum.TextXAlignment.Right,
+			Font = Enum.Font.GothamBold,
+			TextSize = 13,
+			Parent = panel,
+		})
+	end
+
+	rowRefreshers[#rowRefreshers + 1] = function(data: DataController.PlayerData)
+		local odds = LootManager.GetTierOdds(effectiveLuck(data))
+		for tier, lbl in pairs(valueLabels) do
+			lbl.Text = formatChance(odds[tier] or 0)
+		end
+	end
+end
+
+-- ---------------------------------------------------------------------------
 -- Window construction
 -- ---------------------------------------------------------------------------
 
@@ -263,6 +358,7 @@ local function build()
 	layout.Parent = list
 
 	local order = 0
+	buildOddsPanel(list, order)
 	for _, rod in ipairs(GameConfig.GetSortedRods()) do
 		order += 1
 		buildRodRow(list, rod, order)

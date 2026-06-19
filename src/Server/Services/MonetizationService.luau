@@ -72,6 +72,7 @@ local function autoCatch(player: Player)
 		CaughtAt = os.time(),
 	})
 
+	local odds = LootManager.GetTierOdds(luck)
 	FishingNetwork:FireClient(player, "CatchResult", {
 		success = true,
 		auto = true,
@@ -82,6 +83,7 @@ local function autoCatch(player: Player)
 			Color = caught.Item.Color,
 		},
 		value = caught.Value,
+		chance = odds[caught.Item.Rarity],
 	})
 end
 
