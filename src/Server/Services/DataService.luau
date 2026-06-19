@@ -46,6 +46,9 @@ export type InventoryEntry = {
 export type PlayerStats = {
 	TotalCaught: number,
 	CoinsEarned: number,
+	RarestChance: number, -- lowest tier-odds ever landed (0 = none yet)
+	RarestName: string,
+	RarestRarity: string,
 }
 
 export type PlayerData = {
@@ -92,6 +95,9 @@ local PROFILE_TEMPLATE: PlayerData = {
 	Stats = {
 		TotalCaught = 0,
 		CoinsEarned = 0,
+		RarestChance = 0,
+		RarestName = "",
+		RarestRarity = "",
 	},
 	Passes = {},
 	IsPremium = false,
@@ -258,6 +264,25 @@ function DataService:AddToInventory(player: Player, itemData: InventoryEntry): n
 
 	sync(player, profile.Data)
 	return #profile.Data.Inventory
+end
+
+--[[
+	RecordCatchChance
+	Records a catch's rarity-tier odds; if it's the rarest (lowest chance) the
+	player has ever landed, it becomes their "rarest catch". No-op otherwise.
+]]
+function DataService:RecordCatchChance(player: Player, chance: number, name: string, rarity: string)
+	local profile = activeProfile(player)
+	if profile == nil or type(chance) ~= "number" or chance <= 0 then
+		return
+	end
+	local stats = profile.Data.Stats
+	if stats.RarestChance == 0 or chance < stats.RarestChance then
+		stats.RarestChance = chance
+		stats.RarestName = tostring(name)
+		stats.RarestRarity = tostring(rarity)
+		sync(player, profile.Data)
+	end
 end
 
 --[[

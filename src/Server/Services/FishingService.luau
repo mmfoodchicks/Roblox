@@ -256,6 +256,8 @@ local function handleResolveMinigame(player: Player, payload: unknown)
 	-- this catch's rarity tier (at the exact luck used for the roll) so the client
 	-- can show "... — 0.07% chance".
 	local odds = LootManager.GetTierOdds(luck)
+	local chance = odds[caught.Item.Rarity]
+	DataService:RecordCatchChance(player, chance, caught.Item.Name, caught.Item.Rarity)
 	FishingNetwork:FireClient(player, "CatchResult", {
 		success = true,
 		item = {
@@ -265,7 +267,7 @@ local function handleResolveMinigame(player: Player, payload: unknown)
 			Color = caught.Item.Color,
 		},
 		value = caught.Value,
-		chance = odds[caught.Item.Rarity],
+		chance = chance,
 	})
 end
 

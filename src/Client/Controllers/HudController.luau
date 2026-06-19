@@ -28,6 +28,7 @@ local rodLabel: TextLabel? = nil
 local luckLabel: TextLabel? = nil
 local valueLabel: TextLabel? = nil
 local keysLabel: TextLabel? = nil
+local rarestLabel: TextLabel? = nil
 
 -- ---------------------------------------------------------------------------
 -- Construction
@@ -84,6 +85,7 @@ local function build()
 	valueLabel = statChip(stats, "Unsold", 3)
 	luckLabel = statChip(stats, "Luck", 4)
 	rodLabel = statChip(stats, "Rod", 5)
+	rarestLabel = statChip(stats, "Rarest", 6)
 
 	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 	screen.Parent = playerGui
@@ -92,6 +94,20 @@ end
 -- ---------------------------------------------------------------------------
 -- Refresh
 -- ---------------------------------------------------------------------------
+
+-- Formats a probability (0..1) as a readable percentage.
+local function formatChance(p: number): string
+	local v = p * 100
+	if v >= 10 then
+		return string.format("%.0f%%", v)
+	elseif v >= 1 then
+		return string.format("%.1f%%", v)
+	elseif v >= 0.01 then
+		return string.format("%.2f%%", v)
+	else
+		return string.format("%.3f%%", v)
+	end
+end
 
 -- Mirrors BoostService:GetCoinMultiplier for display only (passes + Premium +
 -- equipped pets). The server remains authoritative for the actual payout.
@@ -143,6 +159,17 @@ local function refresh(data: DataController.PlayerData)
 		local rod = GameConfig.GetRod(data.ActiveRod)
 		rodLabel.Text = rod.Name
 		rodLabel.TextColor3 = rod.Color
+	end
+
+	if rarestLabel ~= nil then
+		local chance = data.Stats.RarestChance
+		if chance > 0 then
+			rarestLabel.Text = "🏆 " .. formatChance(chance)
+			rarestLabel.TextColor3 = UiUtil.Rarity[data.Stats.RarestRarity] or UiUtil.Palette.Text
+		else
+			rarestLabel.Text = "🏆 Rarest: —"
+			rarestLabel.TextColor3 = UiUtil.Palette.SubText
+		end
 	end
 end
 
