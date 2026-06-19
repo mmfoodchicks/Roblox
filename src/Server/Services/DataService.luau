@@ -220,15 +220,30 @@ function DataService:AwardCoins(player: Player, amount: number): number?
 	return profile.Data.Coins
 end
 
+-- Hard cap on stored unsold catches. Protects the profile from unbounded growth
+-- (e.g. an AFK player with the Auto Fisher) blowing the DataStore size limit.
+-- Far above normal play; sell at the market to make room.
+local MAX_INVENTORY = 1500
+
 --[[
 	AddToInventory
-	Appends a normalised caught-item record and bumps the TotalCaught stat.
-	Returns the new inventory size, or nil if unavailable.
+	Appends a normalised caught-item record and bumps the TotalCaught stat. The
+	catch always counts toward stats, but once the inventory is at MAX_INVENTORY
+	the entry is not stored (the player must sell first). Returns the new inventory
+	size, "full" (a flag), or nil if the profile is unavailable.
 ]]
 function DataService:AddToInventory(player: Player, itemData: InventoryEntry): number?
 	local profile = activeProfile(player)
 	if profile == nil then
 		return nil
+	end
+
+	-- The catch still counts as caught even if there's no room to store it.
+	profile.Data.Stats.TotalCaught += 1
+
+	if #profile.Data.Inventory >= MAX_INVENTORY then
+		sync(player, profile.Data)
+		return #profile.Data.Inventory -- full: not stored, but not an error
 	end
 
 	local entry: InventoryEntry = {
@@ -240,7 +255,6 @@ function DataService:AddToInventory(player: Player, itemData: InventoryEntry): n
 	}
 
 	table.insert(profile.Data.Inventory, entry)
-	profile.Data.Stats.TotalCaught += 1
 
 	sync(player, profile.Data)
 	return #profile.Data.Inventory

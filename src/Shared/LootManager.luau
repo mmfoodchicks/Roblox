@@ -126,7 +126,7 @@ function LootManager.SelectLoot(luck: number?): LootItem
 	-- 1) Build the modified-weight distribution and normalise the total.
 	local totalWeight = 0
 	-- Pre-size a parallel array of cumulative weights for the walk in step 3.
-	local cumulative: { number } = table.create(#catalogue)
+	local cumulative: { number } = table.create(#catalogue, 0)
 
 	for index, item in ipairs(catalogue) do
 		-- Rarer items (lower base weight) benefit more from luck. The exponent
