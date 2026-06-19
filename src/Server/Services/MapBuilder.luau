@@ -51,13 +51,8 @@ local DOCK_HEIGHT = 6          -- Deck height above water level.
 -- the island as an area to discover.
 local SPAWN_Z = ISLAND_RADIUS - 34
 
--- Parkour course tuning — a long, hard spiral climb. Jumps are wide so it can't
--- be cheesed; players must discover and master it.
-local PARKOUR_REWARD = 250     -- Coins for reaching the summit...
-local PARKOUR_COOLDOWN = 90    -- ...claimable at most once per this many seconds.
-local PARKOUR_STEP_UP = 3.4    -- Height gained per ledge.
-local PARKOUR_CHORD = 11       -- Horizontal jump distance between ledges (harder).
-local PARKOUR_LEDGE_OUT = 6    -- How far pieces jut from the true rock surface.
+-- Parkour is a mega-hard floating-block course (see buildParkour); its tuning
+-- lives next to that function.
 
 -- The mountain dominates the island. Sculpted from Terrain rock, it is steep and
 -- smooth (so it can't be free-climbed — see SprintController's MaxSlopeAngle),
@@ -86,26 +81,6 @@ local COLORS = {
 -- Radius of the mountain cone at a given height (used by the terrain sculptor).
 local function coneRadius(h: number): number
 	return MOUNTAIN_BASE_R + (MOUNTAIN_TOP_R - MOUNTAIN_BASE_R) * (h / MOUNTAIN_HEIGHT)
-end
-
--- The TRUE outer radius of the sculpted rock at a given height. The mountain is a
--- stack of balls, so the wide lower balls bulge outward and the real surface at a
--- given height is the envelope of all balls — much further out than coneRadius()
--- near the base. Parkour pieces must hug THIS, or they end up buried in the rock.
-local function surfaceRadius(h: number): number
-	local best = 0
-	for hp = 0, MOUNTAIN_HEIGHT, 3 do
-		local R = coneRadius(hp)
-		local dy = h - hp
-		local sq = R * R - dy * dy
-		if sq > 0 then
-			local rad = math.sqrt(sq)
-			if rad > best then
-				best = rad
-			end
-		end
-	end
-	return best
 end
 
 
@@ -588,189 +563,128 @@ local function buildUnderMountain(parent: Instance)
 	end
 end
 
--- Places one natural climbing feature at `pos`. `angle` is the radial angle of
--- the spot on the mountain, so we can build decoration INWARD (into the cliff)
--- and keep a clear standable top facing OUTWARD. Cycles four kinds — rock
--- outcrops, cliff trees, leafy branches and gnarled roots — so the route reads
--- as real outcroppings rather than identical slabs.
-local function buildParkourPiece(parent: Instance, pos: Vector3, angle: number, index: number, dim: number)
-	local outward = Vector3.new(math.cos(angle), 0, math.sin(angle))
-	local inward = -outward
-	local tangent = Vector3.new(-math.sin(angle), 0, math.cos(angle))
-	local up = Vector3.new(0, 1, 0)
-	local kind = index % 4
-
-	-- Small helpers (decorative foliage / boulders don't collide; you pass through).
-	local function leaf(p: Vector3, s: number)
-		makePart({
-			Name = "Leaf" .. index,
-			Size = Vector3.new(s, s * 0.8, s),
-			CFrame = CFrame.new(p),
-			Color = COLORS.Leaves,
-			Material = Enum.Material.Grass,
-			Shape = Enum.PartType.Ball,
-			CanCollide = false,
-			Parent = parent,
-		})
-	end
-	local function boulder(p: Vector3, s: number)
-		makePart({
-			Name = "Boulder" .. index,
-			Size = Vector3.new(s, s, s),
-			CFrame = CFrame.new(p),
-			Color = COLORS.Rock,
-			Material = Enum.Material.Rock,
-			Shape = Enum.PartType.Ball,
-			CanCollide = false,
-			Parent = parent,
-		})
-	end
-
-	if kind == 0 then
-		-- ROCK OUTCROP: a flat shelf with a boulder anchoring it into the cliff.
-		makePart({
-			Name = "Outcrop" .. index,
-			Size = Vector3.new(dim + 2, 1.6, dim + 2),
-			CFrame = CFrame.new(pos) * CFrame.Angles(math.rad(4), angle, 0),
-			Color = COLORS.LedgeRock,
-			Material = Enum.Material.Slate,
-			Parent = parent,
-		})
-		boulder(pos + inward * (dim * 0.4) - up * 1.5, dim + 3)
-		boulder(pos + tangent * (dim * 0.45) + up * 0.6, 2.4)
-	elseif kind == 1 then
-		-- CLIFF TREE: a dirt shelf with a trunk + canopy growing toward the cliff,
-		-- leaving the outward half open to land on.
-		makePart({
-			Name = "TreeShelf" .. index,
-			Size = Vector3.new(dim + 2, 1.5, dim + 2),
-			CFrame = CFrame.new(pos),
-			Color = COLORS.Path,
-			Material = Enum.Material.Ground,
-			Parent = parent,
-		})
-		local trunkBase = pos + inward * 1.5
-		makePart({
-			Name = "Trunk" .. index,
-			Size = Vector3.new(2, 9, 2),
-			CFrame = CFrame.new(trunkBase + up * 4.5),
-			Color = COLORS.Trunk,
-			Material = Enum.Material.Wood,
-			CanCollide = false,
-			Parent = parent,
-		})
-		leaf(trunkBase + up * 9, dim + 5)
-		leaf(trunkBase + up * 7 + tangent * 2.5, dim + 2)
-		leaf(trunkBase + up * 7 - tangent * 2.5, dim + 2)
-	elseif kind == 2 then
-		-- LEAFY BRANCH: a thick branch reaching out of the cliff with foliage, the
-		-- outer end flat enough to stand on.
-		local cliffPoint = pos + inward * (dim + 6)
-		local center = (cliffPoint + pos) / 2
-		makePart({
-			Name = "Branch" .. index,
-			Size = Vector3.new(2.6, 2, (pos - cliffPoint).Magnitude),
-			CFrame = CFrame.lookAt(center, pos),
-			Color = COLORS.Trunk,
-			Material = Enum.Material.Wood,
-			Parent = parent,
-		})
-		leaf(pos + outward * 1 + up * 1.6, dim + 2)
-		leaf(pos + tangent * 2.5 + up * 1, dim)
-		leaf(pos - tangent * 2.5 + up * 1, dim)
-	else
-		-- GNARLED ROOTS: a flat cap held up by root tendrils weaving out of the rock.
-		makePart({
-			Name = "RootCap" .. index,
-			Size = Vector3.new(dim + 2, 1.4, dim + 2),
-			CFrame = CFrame.new(pos),
-			Color = COLORS.Trunk,
-			Material = Enum.Material.Wood,
-			Parent = parent,
-		})
-		for i = -1, 1 do
-			local rootFrom = pos + inward * (dim + 5) + tangent * (i * 2.2) - up * 2.5
-			local rootTo = pos + tangent * (i * 1.0) - up * 0.5
-			makePart({
-				Name = "Root" .. index .. "_" .. i,
-				Size = Vector3.new(1.4, 1.4, (rootTo - rootFrom).Magnitude),
-				CFrame = CFrame.lookAt((rootFrom + rootTo) / 2, rootTo),
-				Color = COLORS.WoodDark,
-				Material = Enum.Material.Wood,
-				CanCollide = false,
-				Parent = parent,
-			})
-		end
-	end
+-- One small floating block in the course.
+local function buildParkourBlock(parent: Instance, pos: Vector3, size: number, color: Color3)
+	makePart({
+		Name = "Block",
+		Size = Vector3.new(size, 1, size),
+		CFrame = CFrame.new(pos),
+		Color = color,
+		Material = Enum.Material.SmoothPlastic,
+		Parent = parent,
+	})
 end
 
--- Builds the parkour: a short entrance climb up the SW face (away from the tunnel
--- mouths), then a long spiral of mixed rock/log/branch pieces wrapping the
--- mountain to a summit reward. Everything starts ABOVE the cavern ceiling so no
--- piece ever floats inside the carved tunnel. It's meant to be discovered.
---
--- The spiral keeps each jump reachable: at height h the cone has radius r, so to
--- step ~PARKOUR_CHORD studs around the circle we advance the angle by
--- 2*asin(chord / 2r); as the cone narrows the path winds tighter near the top.
+-- Height of the mountain rock directly below a point at axis-radius `r` (inverse
+-- of the cone), so the spiral's blocks clear the rock when passing over it.
+local function mountainHeightAt(r: number): number
+	if r >= MOUNTAIN_BASE_R then
+		return 0
+	end
+	local h = (MOUNTAIN_BASE_R - r) * MOUNTAIN_HEIGHT / (MOUNTAIN_BASE_R - MOUNTAIN_TOP_R)
+	return math.clamp(h, 0, MOUNTAIN_HEIGHT)
+end
+
+-- Mega-hard floating-block course tuning + chest reward.
+local PARKOUR_CHORD = 14.5          -- horizontal-ish gap between blocks (hard)
+local PARKOUR_MAX_RISE = 4          -- max climb per jump (still jumpable)
+local PARKOUR_RADIUS_STEP = 2.0     -- how fast the spiral pulls inward per block
+local PARKOUR_BLOCK = 3.2           -- tiny landing pads = brutal
+local PARKOUR_CHEST_COINS = 1200
+local PARKOUR_CHEST_KEYS = 1
+local PARKOUR_CHEST_COOLDOWN = 300
+
+-- Builds the parkour: a long, MEGA-HARD floating-block course. It starts at the
+-- +Z shore, spirals all over the map (out over the water, around the island)
+-- while climbing inward, and finally lands on the mountain summit where the chest
+-- sits. Jumps are kept just-reachable (~CHORD across, <=MAX_RISE up) but the tiny
+-- pads + long gaps make it punishing — sprint (Shift) helps.
 local function buildParkour(parent: Instance)
 	local model = Instance.new("Model")
 	model.Name = "Parkour"
 	model.Parent = parent
 
-	local entryAngle = math.rad(135) -- front-left face, clear of the tunnel mouths
-	local groundStart = CAVERN_HEIGHT + 4 -- start above the tunnel ceiling
-	local topH = MOUNTAIN_HEIGHT - 8
-	local index = 0
+	local rng = Random.new(20240618)
+	local startRadius = 192
+	local endRadius = 4
+	local startHeight = 6
+	local summitHeight = MOUNTAIN_HEIGHT + 10
 
-	-- Entrance: a near-vertical ladder of pieces from just above the cavern up to
-	-- the spiral start, at a fixed (solid-rock) angle so players can climb on.
-	do
-		local h = 4
-		while h < groundStart do
-			index += 1
-			local r = surfaceRadius(h) + PARKOUR_LEDGE_OUT
-			local pos = Vector3.new(MOUNTAIN_X + math.cos(entryAngle) * r, h, MOUNTAIN_Z + math.sin(entryAngle) * r)
-			buildParkourPiece(model, pos, entryAngle, index, 6)
-			h += PARKOUR_STEP_UP
+	local lowColor = Color3.fromRGB(64, 156, 255)
+	local highColor = Color3.fromRGB(255, 200, 90)
+
+	local angle = math.pi / 2 -- start at +Z (by the dock / shore)
+	local radius = startRadius
+	local height = startHeight
+
+	-- Start platform (bigger, easy to mount from the shore).
+	makePart({
+		Name = "ParkourStart",
+		Size = Vector3.new(9, 1, 9),
+		CFrame = CFrame.new(math.cos(angle) * radius, height, math.sin(angle) * radius),
+		Color = lowColor,
+		Material = Enum.Material.Neon,
+		Parent = model,
+	})
+
+	local guard = 0
+	while guard < 500 do
+		guard += 1
+
+		-- Step around the spiral and pull inward.
+		angle += 2 * math.asin(math.clamp(PARKOUR_CHORD / (2 * math.max(radius, 4)), 0, 1))
+		radius = math.max(endRadius, radius - PARKOUR_RADIUS_STEP)
+
+		-- Rise steadily toward the summit, but always clear the mountain rock.
+		local progress = (startRadius - radius) / (startRadius - endRadius)
+		local desired = math.max(
+			startHeight + progress * (summitHeight - startHeight),
+			mountainHeightAt(radius) + 12
+		)
+		height += math.clamp(desired - height, -PARKOUR_MAX_RISE, PARKOUR_MAX_RISE)
+
+		local jitter = rng:NextNumber(-1, 1)
+		local pos = Vector3.new(math.cos(angle) * radius, height + jitter, math.sin(angle) * radius)
+		local color = lowColor:Lerp(highColor, math.clamp(height / summitHeight, 0, 1))
+		buildParkourBlock(model, pos, PARKOUR_BLOCK, color)
+
+		if radius <= endRadius and height >= summitHeight - PARKOUR_MAX_RISE - 1 then
+			break
 		end
 	end
 
-	-- Spiral around the mountain to the top.
-	local h = groundStart
-	local angle = entryAngle
-	while h <= topH and index < 300 do
-		index += 1
-		local r = surfaceRadius(h) + PARKOUR_LEDGE_OUT
-		local pos = Vector3.new(MOUNTAIN_X + math.cos(angle) * r, h, MOUNTAIN_Z + math.sin(angle) * r)
-
-		-- Pieces shrink with height for tighter landings near the top (harder).
-		local frac = (h - groundStart) / (topH - groundStart)
-		local dim = math.max(4, 6 - math.floor(frac * 2 + 0.5))
-
-		buildParkourPiece(model, pos, angle, index, dim)
-
-		local ratio = math.clamp(PARKOUR_CHORD / (2 * r), 0, 1)
-		angle += 2 * math.asin(ratio)
-		h += PARKOUR_STEP_UP
-	end
-
-	-- Summit: a big landing pad capping the climb, with the reward beacon above.
-	local sr = surfaceRadius(topH) + PARKOUR_LEDGE_OUT
-	local summitPos = Vector3.new(MOUNTAIN_X + math.cos(angle) * sr, topH + 3, MOUNTAIN_Z + math.sin(angle) * sr)
+	-- Summit landing pad + the chest, on top of the mountain.
+	local summitPos = Vector3.new(MOUNTAIN_X, summitHeight + 1, MOUNTAIN_Z)
 	makePart({
 		Name = "Summit",
-		Size = Vector3.new(10, 1, 10),
+		Size = Vector3.new(14, 1, 14),
 		CFrame = CFrame.new(summitPos),
 		Color = COLORS.Reward,
 		Material = Enum.Material.WoodPlanks,
 		Parent = model,
 	})
 
-	-- Glowing reward beacon above the summit ledge (walk into it to claim).
+	local chestBase = summitPos + Vector3.new(0, 1, 0)
+	makePart({
+		Name = "ChestBody",
+		Size = Vector3.new(5, 3, 3.6),
+		CFrame = CFrame.new(chestBase + Vector3.new(0, 1.5, 0)),
+		Color = COLORS.Wood,
+		Material = Enum.Material.WoodPlanks,
+		Parent = model,
+	})
+	makePart({
+		Name = "ChestLid",
+		Size = Vector3.new(5, 1.2, 3.6),
+		CFrame = CFrame.new(chestBase + Vector3.new(0, 3.1, 0)),
+		Color = COLORS.WoodDark,
+		Material = Enum.Material.Wood,
+		Parent = model,
+	})
 	local reward = makePart({
 		Name = "ParkourReward",
-		Size = Vector3.new(4, 4, 4),
-		CFrame = CFrame.new(summitPos + Vector3.new(0, 4, 0)),
+		Size = Vector3.new(5.2, 0.7, 3.8),
+		CFrame = CFrame.new(chestBase + Vector3.new(0, 1.5, 0)),
 		Color = COLORS.Reward,
 		Material = Enum.Material.Neon,
 		CanCollide = false,
@@ -780,16 +694,15 @@ local function buildParkour(parent: Instance)
 
 	local light = Instance.new("PointLight")
 	light.Color = COLORS.Reward
-	light.Range = 18
+	light.Range = 20
 	light.Brightness = 3
 	light.Parent = reward
 
-	-- Floating call-out — only visible once you're near the summit (discovery).
 	local billboard = Instance.new("BillboardGui")
-	billboard.Size = UDim2.fromOffset(180, 44)
-	billboard.StudsOffset = Vector3.new(0, 3, 0)
+	billboard.Size = UDim2.fromOffset(190, 44)
+	billboard.StudsOffset = Vector3.new(0, 4, 0)
 	billboard.AlwaysOnTop = true
-	billboard.MaxDistance = 35
+	billboard.MaxDistance = 45
 	billboard.Parent = reward
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.fromScale(1, 1)
@@ -798,10 +711,10 @@ local function buildParkour(parent: Instance)
 	label.TextScaled = true
 	label.TextColor3 = Color3.fromRGB(255, 240, 180)
 	label.TextStrokeTransparency = 0.3
-	label.Text = string.format("🏆 +%d Coins", PARKOUR_REWARD)
+	label.Text = "ð Summit Chest"
 	label.Parent = billboard
 
-	-- Server-authoritative reward grant with a per-player cooldown.
+	-- Server-authoritative grant with a per-player cooldown.
 	local lastClaim: { [Player]: number } = {}
 	reward.Touched:Connect(function(hit: BasePart)
 		local character = hit.Parent
@@ -812,18 +725,18 @@ local function buildParkour(parent: Instance)
 		if player == nil then
 			return
 		end
-
 		local now = os.clock()
 		local previous = lastClaim[player]
-		if previous ~= nil and (now - previous) < PARKOUR_COOLDOWN then
+		if previous ~= nil and (now - previous) < PARKOUR_CHEST_COOLDOWN then
 			return
 		end
 		lastClaim[player] = now
 
-		local newBalance = DataService:AwardCoins(player, PARKOUR_REWARD)
-		if newBalance ~= nil then
+		local ok = DataService:AwardCoins(player, PARKOUR_CHEST_COINS)
+		if ok ~= nil then
+			DataService:AddKeys(player, PARKOUR_CHEST_KEYS)
 			FishingNetwork:FireClient(player, "Notice", {
-				text = string.format("🏆 Parkour complete!  +%d coins", PARKOUR_REWARD),
+				text = string.format("ð Summit Chest!  +%d coins, +%d keys", PARKOUR_CHEST_COINS, PARKOUR_CHEST_KEYS),
 			})
 		end
 	end)
